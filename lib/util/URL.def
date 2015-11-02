@@ -1,0 +1,13 @@
+Include "HashTable.def"
+
+
+Define URL_PROTOCOL_SEPARATOR	"://"
+Define URL_PART_SEPARATOR		"/"
+Define URL_QUERY_SEPARATOR		"?"
+
+
+Declare Function URLGetProtocol(url As String) As String
+Declare Function URLGetHost(url As String) As String
+Declare Function URLGetTail(url As String) As String
+
+Declare Sub URLGetParameters(url As String, pmap As HashTable)

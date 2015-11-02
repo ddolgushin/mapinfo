@@ -1,0 +1,16 @@
+Declare Sub CreateMapFor(tables() As String)
+Declare Sub AddLayer(ByVal winId As Integer, ByVal layerName As String)
+Declare Sub RemoveLayer(ByVal winId As Integer, ByVal layerName As String)
+Declare Sub AddLayers(ByVal winId As Integer, layers() As String)
+Declare Sub GetLayers(ByVal winId As Integer, layers() As String)
+Declare Sub GetLayersExt(ByVal winId As Integer, layers() As String, ByVal onlyVisible As Logical)
+Declare Sub RemoveLayers(ByVal winId As Integer, layers() As String)
+Declare Sub ReplaceLayers(ByVal winId As Integer, layers() As String)
+Declare Sub SetLayerEditable(ByVal winId As Integer, layer As String, ByVal flag As Logical)
+Declare Sub SetLayerVisible(ByVal winId As Integer, layer As String, ByVal flag As Logical)
+Declare Sub DisableScaleLimit(winId As Integer, ByVal tableName As String)
+
+Declare Function WindowContainsLayer(winId As Integer, layerName As String) As Logical
+Declare Function GetWindowID(layerName As String, ByVal onlyFirst As Logical) As Integer
+Declare Function GetFirstMapperID() As Integer
+Declare Function GetLayerNum(ByVal winId As Integer, ByVal layerName As String) As Integer

@@ -1,0 +1,52 @@
+Include "mapbasic.def"
+Include "EncodingTools.def"
+Include "TableTools.def"
+Include "../util/Util.def"
+
+
+Define QUOTE_OPEN	"«" ' double quote <<, code 171
+Define QUOTE_CLOSE	"»" ' double quote >>, code 187
+
+
+'
+' Complementing double quotes with another quotes
+' to meet MapBasic's requirements to string representation.
+'
+Function EncodeForDB(ByVal str As String) As String
+	Dim res As String
+	
+	res = EncodeForDbNoCut(str)
+	
+	If Len(res) > MAX_CHAR_FIELD_LENGTH Then
+		res = Mid$(res, 1, MAX_CHAR_FIELD_LENGTH)
+		
+		' Avoid unclosed quotes.
+		If Mid$(res, MAX_CHAR_FIELD_LENGTH, 1) = """"
+				And Mid$(res, MAX_CHAR_FIELD_LENGTH - 1, 1) <> """" Then
+			res = Mid$(res, 1, MAX_CHAR_FIELD_LENGTH - 1)
+		End If
+	End If
+	
+	EncodeForDB = res
+End Function
+
+
+Function EncodeForDbNoCut(ByVal str As String) As String
+	Dim res As String
+	
+	res = DecodeFromDB(str)
+	res = StrReplace(QUOTE_OPEN, """", res)
+	res = StrReplace(QUOTE_CLOSE, """", res)
+	res = StrReplace("""", """""", res)
+	res = Trim(res)
+	
+	EncodeForDbNoCut = res
+End Function
+
+
+'
+' Return string encoded with EncodeForDB to its primary state.
+'
+Function DecodeFromDB(ByVal str As String) As String
+	DecodeFromDB = StrReplace("""""", """", str)
+End Function

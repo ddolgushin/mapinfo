@@ -1,0 +1,26 @@
+Include "Vector.def"
+
+
+Define MAX_INT	2147483648
+
+Type Line2D
+	p1 As Point2D
+	p2 As Point2D
+End Type
+
+
+Declare Sub CreateLine2D(l As Line2D, p1 As Point2D, p2 As Point2D)
+Declare Sub CreateLine2DExt(l As Line2D, ByVal x1 As Float, ByVal y1 As Float, ByVal x2 As Float, ByVal y2 As Float)
+Declare Sub CopyLine(l1 As Line2D, l2 As Line2D)
+Declare Sub AddLine2DToArray(lineArr() As Line2D, v As Line2D)
+Declare Sub GetLine2DVector(l As Line2D, v As Vector2D)
+Declare Sub InvertLine(l As Line2D)
+Declare Sub GetPointOnLine(startPoint As Point2D, endPoint As Point2D, ByVal distance As Float, resPoint As Point2D)
+
+Declare Function GetLine2DLength(l As Line2D) As Float
+Declare Function GetAngleBetweenLines2D(l1 As Line2D, l2 As Line2D) As Float
+Declare Function GetAngleBetweenLines2DSimple(l1 As Line2D, l2 As Line2D) As Float
+Declare Function GetPositionAngle(l As Line2D) As Float
+Declare Function Line2DToString(l As Line2D) As String
+Declare Function Compare2DLines(l1 As Line2D, l2 As Line2D) As SmallInt
+Declare Function GetFunctionValue(l As Line2D, ByVal x As Float) As Float

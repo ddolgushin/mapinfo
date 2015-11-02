@@ -1,0 +1,113 @@
+Include "mapbasic.def"
+Include "Vector.def"
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub CreateVector2D(v As Vector2D, p As Point2D)
+	Call CreatePoint2D(v.p, p.x, p.y)
+End Sub
+
+
+Sub CreateVector2DExt(v As Vector2D, ByVal x As Float, ByVal y As Float)
+	v.p.x = x
+	v.p.y = y
+End Sub
+
+
+Function MultiplyVectors2D(v1 As Vector2D, v2 As Vector2D) As Float
+	MultiplyVectors2D = v1.p.x * v2.p.x + v1.p.y * v2.p.y
+End Function
+
+
+Function GetVector2DLength(v As Vector2D) As Float
+	GetVector2DLength = Sqr(v.p.x ^ 2 + v.p.y ^ 2)
+End Function
+
+
+Function Vector2DToString(v As Vector2D) As String
+	Vector2DToString = Point2DToString(v.p)
+End Function
+
+
+Function GetVector2DQuadrant(v As Vector2D) As SmallInt
+	Dim q As SmallInt
+	
+	If v.p.x > 0 And v.p.y >= 0 Then
+		q = QUADRANT_I
+	ElseIf v.p.x <= 0 And v.p.y > 0 Then
+		q = QUADRANT_II
+	ElseIf v.p.x < 0 And v.p.y <= 0 Then
+		q = QUADRANT_III
+	ElseIf v.p.x >= 0 And v.p.y < 0 Then
+		q = QUADRANT_IV
+	End If
+	
+	GetVector2DQuadrant = q
+End Function
+
+
+Sub ChangeVector2DDirection(v As Vector2D, ByVal direction As SmallInt)
+	If direction = DIRECTION_NORTH Then
+		If v.p.y < 0 Then
+			v.p.x = -1 * v.p.x
+			v.p.y = -1 * v.p.y
+		End If
+	ElseIf direction = DIRECTION_EAST Then
+		If v.p.x < 0 Then
+			v.p.x = -1 * v.p.x
+		End If
+	ElseIf direction = DIRECTION_SOUTH Then
+		If v.p.y > 0 Then
+			v.p.x = -1 * v.p.x
+			v.p.y = -1 * v.p.y
+		End If
+	ElseIf direction = DIRECTION_WEST Then
+		If v.p.x >= 0 Then
+			v.p.x = -1 * v.p.x
+		End If
+	End If
+End Sub
+
+
+Function GetVector2DVerticalDirection(v As Vector2D) As SmallInt
+	If v.p.y >= 0 Then
+		GetVector2DVerticalDirection = DIRECTION_NORTH
+	Else
+		GetVector2DVerticalDirection = DIRECTION_SOUTH
+	End If
+End Function
+
+
+Function GetVector2DHorizontalDirection(v As Vector2D) As SmallInt
+	If v.p.x >= 0 Then
+		GetVector2DHorizontalDirection = DIRECTION_EAST
+	Else
+		GetVector2DHorizontalDirection = DIRECTION_WEST
+	End If
+End Function
+
+
+'
+' Distance in CCW order.
+'
+' v1 pointing to qIV, v2 pointing to qI => quadrant distance is 1.
+'
+Function GetVector2DQuadrantDistance(v1 As Vector2D, v2 As Vector2D)
+		As SmallInt
+	Dim vq1, vq2 As SmallInt
+	
+	vq1 = GetVector2DQuadrant(v1)
+	vq2 = GetVector2DQuadrant(v2)
+	
+	If vq1 <= vq2 Then
+		GetVector2DQuadrantDistance = vq2 - vq1
+	Else
+		GetVector2DQuadrantDistance = QUADRANT_IV - (vq1 - vq2)
+	End If
+End Function

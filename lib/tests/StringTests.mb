@@ -1,0 +1,63 @@
+Include "Globals.def"
+Include "StringTests.def"
+
+
+Function TestCountWords() As String
+	Dim res As Logical
+	Dim testStr As String
+	
+	res = g_debug
+	testStr = "This is a very test string test jumpin'-pumpin' test string test"
+	
+	If g_debug Then
+		Print CountWords(testStr, "test", FALSE)
+	Else
+		res = (4 = CountWords(testStr, "test", FALSE))
+	End If
+	
+	If res Then
+		testStr = "This is a very test string test jumpin'-pumpin' testing string"
+		
+		If g_debug Then
+			Print CountWords(testStr, "test", TRUE)
+		Else
+			res = (2 = CountWords(testStr, "test", TRUE))
+		End If
+	End If
+	
+	If res Then
+		testStr = "This		is	a	very	test	string	test	jumpin'-pumpin'	test"
+		
+		If g_debug Then
+			Print CountWords(testStr, "test", TRUE)
+		Else
+			res = (3 = CountWords(testStr, "test", TRUE))
+		End If
+	End If
+	
+	If res Then
+		testStr = "test"
+		
+		If g_debug Then
+			Print CountWords(testStr, "test", TRUE)
+		Else
+			res = (1 = CountWords(testStr, "test", TRUE))
+		End If
+	End If
+	
+	If res Then
+		testStr = " testing test test test testing"
+		
+		If g_debug Then
+			Print CountWords(testStr, "test", TRUE)
+		Else
+			res = (3 = CountWords(testStr, "test", TRUE))
+		End If
+	End If
+	
+	If res Then
+		TestCountWords = RESULT_PASSED
+	Else
+		TestCountWords = RESULT_FAILED
+	End If
+End Function

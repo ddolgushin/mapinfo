@@ -1,0 +1,19 @@
+Define DEGREE_DMS		1
+Define DEGREE_DM		2
+Define DEGREE_D			3
+
+
+Declare Sub Inc(v As Integer)
+Declare Sub Dec(v As Integer)
+Declare Sub SwapI(v1 As Integer, v2 As Integer)
+Declare Sub SwapF(v1 As Float, v2 As Float)
+Declare Sub FloatDegreeToDegMin(ByVal deg As Float, d As Float, m As Float)
+Declare Sub FloatDegreeToDegMinSec(ByVal deg As Float, d As Float, m As Float, s As Float)
+
+Declare Function GetAverage(arr() As Float) As Float
+Declare Function Fact(ByVal n As Integer) As Integer
+Declare Function GetMin(arr() As Float) As Float
+Declare Function GetMax(arr() As Float) As Float
+Declare Function GetMin2(ByVal v1 As Float, ByVal v2 As Float) As Float
+Declare Function GetMax2(ByVal v1 As Float, ByVal v2 As Float) As Float
+Declare Function DegreeToString(ByVal deg As Float, ByVal min As Float, ByVal sec As Float, ByVal outType As SmallInt, ByVal prec As SmallInt) As String

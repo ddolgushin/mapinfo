@@ -1,0 +1,5 @@
+Include "HashTable.def"
+
+
+Declare Sub WriteIni(ByVal fileName As String, cfg As HashTable)
+Declare Function ReadIni(ByVal fileName As String, cfg As HashTable) As Logical

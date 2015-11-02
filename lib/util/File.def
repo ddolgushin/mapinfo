@@ -1,0 +1,72 @@
+Define FMODE_READ									1
+Define FMODE_WRITE								2
+Define FMODE_APPEND								3
+Define FMODE_BINARY								4
+
+
+Define DEFAULT_CHARSET						"WindowsCyrillic"
+Define CHARSET_UNICODE						"Unicode"
+Define FILE_ID_START_VALUE				1001	' Leave gap of N numbers for code
+																				' that uses direct file id assignment.
+Define FILE_ID_POOL_SIZE					1000	' Total number of files allowed to open
+																				' at the same time with OpenFile routine.
+
+
+Define FILE_ATTRIBUTE_ARCHIVE							32   ' (0x20)
+Define FILE_ATTRIBUTE_HIDDEN							2    ' (0x2)
+Define FILE_ATTRIBUTE_NORMAL							128  ' (0x80)
+Define FILE_ATTRIBUTE_NOT_CONTENT_INDEXED	8192 ' (0x2000)
+Define FILE_ATTRIBUTE_OFFLINE							4096 ' (0x1000)
+Define FILE_ATTRIBUTE_READONLY						1    ' (0x1)
+Define FILE_ATTRIBUTE_SYSTEM							4    ' (0x4)
+Define FILE_ATTRIBUTE_TEMPORARY						256  ' (0x100)
+
+
+Declare Sub FileWrite(ByVal fileName As String, ByVal data As String, ByVal mode As SmallInt)
+Declare Sub FileWriteExt(ByVal fileName As String, data() As String, ByVal mode As SmallInt)
+
+Declare Function GetDirList(ByVal targetDir As String, dirs() As String) As Integer
+Declare Function GetDirListExt(ByVal targetDir As String, dirs() As String, ByVal fullPath As Logical) As Integer
+Declare Function FileReadLines(ByVal fileName As String, lines() As String) As Integer
+Declare Function FileReadLinesExt(ByVal fileName As String, lines() As String, ByVal charset As String) As Integer
+Declare Function GetFilesInDirectory(ByVal targetDir As String, ByVal ext As String, ByVal recursively As Logical, files() As String) As Logical
+Declare Function GetFileSize(ByVal fileName As String) As Integer
+Declare Function DeleteFile(ByVal fileName As String) As Logical
+
+Declare Function MkDir(ByVal path As String) As Logical
+Declare Function RmDir(ByVal path As String) As Logical
+
+Declare Function MoveFile(ByVal srcName As String, ByVal dstName As String, ByVal rewrite As Logical) As Logical
+Declare Function CopyFile(ByVal srcName As String, ByVal dstName As String, ByVal failIfExists As Logical) As Logical
+Declare Function SetFileAttributes(ByVal fileName As String, ByVal mask As Integer) As Logical
+Declare Function GetFileAttributes(ByVal fileName As String) As Integer
+
+
+'
+' File open and close routines which guarantee unique file ID assignment.
+'
+' The usage is following: open file with OpenFile, which returns the unique
+' file id. Use it in program where it is needed. When file is no more needed,
+' close it using CloseFile routine, providing file id as parameter.
+'
+' From the inside it works as follows: module contains internal variable
+' gl_openFileIdMap of HashTable type. It contains a map of id and file name
+' correspondence. It can hold FILE_ID_POOL_SIZE items, whose ids start
+' from value specified by FILE_ID_START_VALUE constant.
+'
+' ID is chosen each time by step-by-step check of unoccupied value, starting
+' from FILE_ID_START_VALUE, so gaps in provided numbers tends to minimum.
+'
+Declare Function OpenFile(ByVal fileName As String, ByVal mode As Integer) As Integer
+Declare Function OpenTempFile() As Integer
+Declare Function OpenFileExt(ByVal fileName As String, ByVal mode As Integer, ByVal charset As String) As Integer
+
+Declare Function GetTempFileName(ByVal fileId As Integer) As String
+
+Declare Sub CloseFile(ByVal fileId As Integer)
+Declare Sub CloseTempFile(ByVal fileId As Integer)
+
+Declare Function IsFileLocked(ByVal fileName As String) As Logical
+
+Declare Function FileExistsExt(ByVal fileName As String) As Logical
+Declare Function CheckFileName(ByVal fileName As String) As Logical

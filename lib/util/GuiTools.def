@@ -1,0 +1,58 @@
+Define SCALE_COEFF					633.5841845 ' Scale (returned by MapperInfo) to meters coefficient.
+Define GUI_INNER_INDENT			5	' Space between controls.
+Define GUI_OUTER_INDENT			10	' Space between form bound and control.
+Define GUI_VERTICAL_INDENT	15	' Vertical indent between controls.
+Define GUI_BUTTON_WIDTH			40	' Width of buttons in bottom bar.
+
+
+Declare Sub FillListBox(ByVal cid As Integer, items() As String, ByVal firstEmpty As Logical)
+Declare Sub FillPopup(ByVal cid As Integer, items() As String, ByVal firstEmpty As Logical)
+Declare Sub ReadPopupMenu(ByVal cid As Integer, indices() As Integer)
+Declare Sub SetPopupMenuValues(ByVal cid As Integer, indices() As Integer)
+Declare Sub BlinkWindow(winId As Integer)
+
+Declare Sub EnableControl(ByVal cid As Integer)
+Declare Sub DisableControl(ByVal cid As Integer)
+Declare Sub EnableButton(ByVal cid As Integer)
+Declare Sub DisableButton(ByVal cid As Integer)
+
+Declare Sub SetControlEnabled(ByVal cid As Integer, ByVal enabled As Logical)
+Declare Sub SetButtonEnabled(ByVal cid As Integer, ByVal enabled As Logical)
+
+Declare Sub SetControlVisible(ByVal cid As Integer, ByVal visible As Logical)
+
+Declare Function BrowseForFolderDlg(ByVal title As String) As String
+Declare Function DirectoryChooser(ByVal title As String, ByVal initiaDir As String) As String
+
+Declare Function IncPosition(pos As Integer, ByVal incStep As Integer) As Integer
+Declare Function DuplicateWindow(ByVal winId As Integer, ByVal newTitle As String) As Integer
+
+
+'
+' Functions for positioning of elements in a manner of two-column
+' form.
+'
+' In SetDialogPreferences(...):
+' 	* buttonCount - a number of buttons in the bottom of dialog.
+'
+' Client function should declare variable for holding a current baseline
+' value. It is used by IncVPos(...) function, which increases value
+' of passed variable and returns its new value.
+'
+Declare Sub SetDialogPreferences(ByVal formWidth As Integer, ByVal formHeight As Integer,
+	ByVal inputLeftPos As Integer, ByVal innerIndent As Integer,
+	ByVal outerIndent As Integer, ByVal buttonWidth As Integer,
+	ByVal buttonCount As Integer)
+Declare Sub SetDialogPreferencesDefault(ByVal formWidth As Integer,
+	ByVal formHeight As Integer, ByVal inputLeftPos As Integer,
+	ByVal buttonCount As Integer)
+Declare Function GetFormWidth() As Integer
+Declare Function GetFormHeight() As Integer
+Declare Function GetFieldLeft() As Integer
+Declare Function GetLabelLeft() As Integer
+Declare Function GetFieldWidth() As Integer
+Declare Function GetFieldTop(ByVal baseLine As Integer) As Integer
+Declare Function GetButtonTop() As Integer
+Declare Function GetButtonLeft(ByVal buttonNum As Integer) As Integer
+Declare Function GetButtonWidth() As Integer
+Declare Function IncVPos(vPos As Integer) As Integer

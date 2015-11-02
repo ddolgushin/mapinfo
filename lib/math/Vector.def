@@ -1,0 +1,35 @@
+Include "Point.def"
+
+
+Type Vector2D
+	p As Point2D
+End Type
+
+
+'
+' !!! DO NOT CHANGE QUADRANT CONSTANTS !!!
+'
+' These values are used in arithmetic expressions.
+'
+Define QUADRANT_I		1
+Define QUADRANT_II		2
+Define QUADRANT_III		3
+Define QUADRANT_IV		4
+
+Define DIRECTION_NORTH	11
+Define DIRECTION_EAST	12
+Define DIRECTION_SOUTH	13
+Define DIRECTION_WEST	14
+
+
+Declare Sub CreateVector2D(v As Vector2D, p As Point2D)
+Declare Sub CreateVector2DExt(v As Vector2D, ByVal x As Float, ByVal y As Float)
+Declare Sub ChangeVector2DDirection(v As Vector2D, ByVal direction As SmallInt)
+
+Declare Function MultiplyVectors2D(v1 As Vector2D, v2 As Vector2D) As Float
+Declare Function GetVector2DLength(v As Vector2D) As Float
+Declare Function Vector2DToString(v As Vector2D) As String
+Declare Function GetVector2DQuadrant(v As Vector2D) As SmallInt
+Declare Function GetVector2DVerticalDirection(v As Vector2D) As SmallInt
+Declare Function GetVector2DHorizontalDirection(v As Vector2D) As SmallInt
+Declare Function GetVector2DQuadrantDistance(v1 As Vector2D, v2 As Vector2D) As SmallInt

@@ -1,0 +1,85 @@
+Include "Config.def"
+Include "Logger.def"
+Include "Util.def"
+Include "IniTools.def"
+Include "File.def"
+Include "../table/EncodingTools.def"
+
+
+Global gl_cfg As HashTable
+Global gl_cfgFile As String
+
+
+Sub ConfigLoad(ByVal path As String)
+	If Not FileExistsExt(path) Then
+		Note "Не удалось загрузить файл конфигурации"
+		
+		Call LogMsg(LOG_LEVEL_ERROR, "Unable to load configuration from file: "
+			+ path)
+	Else
+		gl_cfgFile = path
+		
+		If ReadIni(gl_cfgFile, gl_cfg) Then End If
+	End If
+End Sub
+
+
+Sub ConfigLoadExt(ByVal path As String,
+		ByVal createIfAbsent As Logical)
+	Dim fileId As Integer
+	
+	If Not FileExistsExt(path) And createIfAbsent Then
+		fileId = OpenFile(path, FMODE_WRITE)
+		
+		Call CloseFile(fileId)
+	End If
+	
+	Call ConfigLoad(path)
+End Sub
+
+
+Sub ConfigSave()
+	Call WriteIni(gl_cfgFile, gl_cfg)
+End Sub
+
+
+Sub ConfigSaveToFile(ByVal path As String)
+	Call WriteIni(path, gl_cfg)
+	
+	gl_cfgFile = path
+End Sub
+
+
+Function ConfigGetFileName() As String
+	ConfigGetFileName = gl_cfgFile
+End Function
+
+
+Sub ConfigSet(ByVal paramName As String, ByVal paramValue As String)
+	Call HashTableAdd(gl_cfg, paramName, EncodeForDbNoCut(paramValue))
+End Sub
+
+
+Function ConfigGet(ByVal paramName As String) As String
+	ConfigGet = DecodeFromDB(HashTableGet(gl_cfg, paramName))
+End Function
+
+
+Function ConfigGetL(ByVal paramName As String) As Logical
+	ConfigGetL = StrToLogical(HashTableGet(gl_cfg, paramName))
+End Function
+
+
+Function ConfigGetI(ByVal paramName As String) As Integer
+	ConfigGetI = StrToInt(HashTableGet(gl_cfg, paramName))
+End Function
+
+
+Function ConfigGetF(ByVal paramName As String) As Float
+	ConfigGetF = StrToFloat(HashTableGet(gl_cfg, paramName))
+End Function
+
+
+Sub ConfigGetKeys(keys() As String)
+	Call HashTableGetKeys(gl_cfg, keys)
+End Sub

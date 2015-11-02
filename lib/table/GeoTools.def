@@ -1,0 +1,101 @@
+Include "../util/List.def"
+
+
+' Constants ordered as in combo box ("Dialogs.mb"), so change it carefully.
+Define ORDER_NW						1
+Define ORDER_N						2
+Define ORDER_NE						3
+Define ORDER_E						4
+Define ORDER_SE						5
+Define ORDER_S						6
+Define ORDER_SW						7
+Define ORDER_W						8
+
+Define CORNER_NW					101
+Define CORNER_NE					102
+Define CORNER_SE					103
+Define CORNER_SW					104
+
+Define SMODE_INTERSECTS							1
+Define SMODE_NOT_INTERSECTS					2
+Define SMODE_ENT_WITHIN							3
+Define SMODE_NOT_ENT_WITHIN					4
+Define SMODE_PART_WITHIN						5
+Define SMODE_NOT_PART_WITHIN				6
+Define SMODE_WITHIN									7
+Define SMODE_NOT_WITHIN							8
+Define SMODE_CONTAINS_ENTIRELY			9
+Define SMODE_NOT_CONTAINS_ENTIRELY	10
+Define SMODE_CONTAINS_PART					11
+Define SMODE_NOT_CONTAINS_PART			12
+Define SMODE_CONTAINS								13
+Define SMODE_NOT_CONTAINS						14
+
+
+Type PLine
+	nodes() As Point2D
+	centroid As Point2D
+End Type
+
+
+Type MPLine
+	plines() As PLine
+	centroid As Point2D
+End Type
+
+
+Type Polygon
+	nodes As PointList
+	centroid As Point2D
+End Type
+
+
+Type Rect
+	o As Object
+End Type
+
+
+Type Obj
+	type As Integer
+	area As Float
+	main As Polygon
+	islands() As Polygon
+End Type
+
+
+Declare Sub ExtractRegionNodes(objs() As Obj, ByVal order As Integer, ByVal swapXY As Logical, ByVal checkDubs As Logical, ByVal useBackup As Logical)
+Declare Sub ExtractPLineNodes(pline As Object, mpline As MPLine, ByVal swapXY As Logical)
+Declare Sub AddObjToArray(arr() As Obj, o As Obj)
+Declare Sub CopyObj(src As Obj, dst As Obj)
+Declare Sub GetObjNodes(obj As Obj, nodes As PointList, ByVal includeIslands As Logical)
+
+Declare Sub AddPLineToArray(arr() As PLine, pl As PLine)
+Declare Sub AddMPLineToArray(arr() As MPLine, mpl As MPLine)
+Declare Sub CopyPLine(src As PLine, dst As PLine)
+
+Declare Sub CopyMPLine(src As MPLine, dst As MPLine)
+Declare Sub GetObjectNodesExt(obj As Object, nodes() As Point2D, ByVal noDubs As Logical)
+Declare Sub OrderObjectsByNW(objs() As Obj)
+Declare Sub CreateRect(r As Rect, p1 As Point2D, p2 As Point2D)
+
+Declare Sub GetObjectNodes(obj As Object, nodes() As Point2D)
+Declare Sub GetObjectCornerPoint(obj As Object, cp As Point2D, ByVal corner As SmallInt)
+Declare Sub GetRegionMinRectCorners(obj As Object, minX as Float, minY as Float, maxX as Float, maxY as Float)
+Declare Sub SelectBy(o As Object, ByVal targetTable As String, ByVal mode As SmallInt)
+Declare Sub GetBounds(points() As Point2D, p1 As Point2D, p2 As Point2D)
+
+Declare Function RectsIntersecting(rect1 As Rect, rect2 As Rect) As Logical
+Declare Function CombineSelection(res As Object) As Logical
+Declare Function CombineSelectionExt(res As Object) As Logical
+Declare Function GetSharedCSysClause(ByVal baseTableName As String, ByVal pointsTableName As String, ByVal c1Field As String, ByVal c2Field As String) As String
+	
+Declare Function RoundObjectNodes(o As Object, roundFormat As Float) As Logical
+Declare Function CreateRegionFromPoints(points As PointList, ByVal swapXY As Logical) As Object
+Declare Function CreateRegionFromObj(o As Obj, ByVal swapXY As Logical) As Object
+Declare Function ObjectFromTables(tables() As String, ByVal whereClause As String) As Object
+Declare Function GetLineLength(l As Object) As Float
+
+Declare Sub GetCentroid(arr() As Point2D, p As Point2D)
+Declare Sub PrintMPLine(mpline As MPLine)
+
+Declare Function PointIntersectsObject(ByVal x As Float, ByVal y As Float, o As Object, ByVal delta As Float) As Logical

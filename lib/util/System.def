@@ -1,0 +1,15 @@
+Define CMD_BATCH_LIMIT			10
+
+
+Declare Sub Sleep(ByVal interval As Integer)
+Declare Sub RunProgramSync(ByVal cmd As String)
+Declare Sub RunProgramSyncExt(ByVal cmd As String, ByVal hide As Logical, ByVal pollInterval As Integer)
+Declare Sub RunProgramsBatch(cmdList() As String, ByVal limit As Integer)
+Declare Sub GetAppList(list() As String, ByVal keepFullPath As Logical)
+
+Declare Function GetTempDirectory() As String
+Declare Function GetWinWordPath() As String
+Declare Function GetLastError() As Integer
+Declare Function CheckDotNet(ByVal minVersion As Float) As Logical
+Declare Function CheckExcel() As Logical
+Declare Function GetEnvironmentVariable(ByVal varName As String) As String

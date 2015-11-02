@@ -1,0 +1,79 @@
+Include "Globals.def"
+Include "UtilTests.def"
+Include "MathTests.def"
+Include "StringTests.def"
+Include "ArrayTests.def"
+
+
+Declare Sub Main()
+
+Declare Function RegisterTest(ByVal fooRes As String) As String
+
+
+Global g_results() As String
+
+
+Sub Main()
+	Dim failCounter As Integer
+	
+	CLS
+	
+	g_debug = DEBUG_MODE
+	
+	Print "Start testing MapBasic libraries..."
+	Print ""
+	Print "*************** UTIL ***************"
+	Print ""
+	Print "TestPathTools: " + RegisterTest(TestPathTools())
+	Print "TestList: " + RegisterTest(TestList()) ' Time consuming test.
+	Print "TestGetFileId: " + TestGetFileId() ' VERY time consuming test.
+	Print "TestURL: " + RegisterTest(TestURL())
+	Print "TestStartsEndsWith: " + RegisterTest(TestStartsEndsWith())
+	Print "TestDateTimeParser: " + RegisterTest(TestDateTimeParser())
+	Print "TestFileSizeToBytes: " + RegisterTest(TestFileSizeToBytes())
+	Print ""
+	Print "*************** MATH ***************"
+	Print ""
+	Print "TestCompareMatrices(): " + RegisterTest(TestCompareMatrices())
+	Print "TestMultiplyMatrices(): " + RegisterTest(TestMultiplyMatrices())
+	Print "TestGetPointOnLine: " + RegisterTest(TestGetPointOnLine())
+	Print "TestGetFunctionValue(): " + RegisterTest(TestGetFunctionValue())
+	Print "TestGetAngleBetweenLines2D(): " + RegisterTest(TestGetAngleBetweenLines2D())
+	Print "TestCompare2DLines(): " + RegisterTest(TestCompare2DLines())
+	Print "TestGetVector2DQuadrant(): " + RegisterTest(TestGetVector2DQuadrant())
+	Print "TestChangeVector2DDirection(): " + RegisterTest(TestChangeVector2DDirection())
+	Print "TestGetVector2DVerticalDirection(): " + RegisterTest(TestGetVector2DVerticalDirection())
+	Print "TestGetVector2DHorizontalDirection(): " + RegisterTest(TestGetVector2DHorizontalDirection())
+	Print "TestGetVector2DQuadrantDistance(): " + RegisterTest(TestGetVector2DQuadrantDistance())
+	Print "TestGetMinMax(): " + RegisterTest(TestGetMinMaxInArr())
+	Print "TestDegreeToDegMin(): " + RegisterTest(TestDegreeToDegMin())
+	Print ""
+	Print "************** STRING **************"
+	Print ""
+	Print "TestCountWords(): " + RegisterTest(TestCountWords())
+	Print ""
+	Print "************** ARRAYS **************"
+	Print ""
+	Print "TestArrayContainsSubset(): " + RegisterTest(TestArrayContainsSubset())
+	Print "TestArraySubtract(): " + RegisterTest(TestArraySubtract())
+	Print "TestArrayIntersect(): " + RegisterTest(TestArrayIntersect())
+	Print "TestArrayAdd(): " + RegisterTest(TestArrayAdd())
+	Print "TestArrayUnique(): " + RegisterTest(TestArrayUnique())
+	Print ""
+	
+	failCounter = ArrayCountString(g_results, RESULT_FAILED)
+	
+	If failCounter = 0 Then
+		Print "All passed"
+	Else
+		Print "Passed: " + (UBound(g_results) - failCounter)
+		Print "Failed: " + failCounter
+	End If
+End Sub
+
+
+Function RegisterTest(ByVal fooRes As String) As String
+	Call AddStringToArray(g_results, fooRes)
+	
+	RegisterTest = fooRes
+End Function

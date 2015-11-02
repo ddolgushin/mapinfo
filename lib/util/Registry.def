@@ -1,0 +1,14 @@
+Define HKEY_CLASSES_ROOT				&H80000000
+Define HKEY_CURRENT_CONFIG			&H80000005
+Define HKEY_CURRENT_USER				&H80000001
+Define HKEY_LOCAL_MACHINE				&H80000002
+Define HKEY_USERS								&H80000003
+
+
+Declare Sub RegistryEnumKeys(ByVal key As String, ByVal subKey As String, subKeys() As String)
+
+Declare Function RegistryCreateKey(ByVal key As String, ByVal subKey As String) As Logical
+Declare Function RegistryReadValue(ByVal key As String, ByVal subKey As String, ByVal value As String) As String
+Declare Function RegistryWriteValueS(ByVal key As String, ByVal subKey As String, ByVal value As String, ByVal data As String) As Logical
+Declare Function RegistryWriteValueI(ByVal key As String, ByVal subKey As String, ByVal value As String, ByVal data As Integer) As Logical
+Declare Function RegistryKeyExists(ByVal key As String, ByVal subKey As String) As Logical

@@ -1,0 +1,20 @@
+Include "mapbasic.def"
+Include "../util/Array.def"
+Include "../util/Util.def"
+Include "../math/Matrix.def"
+Include "../math/Util.def"
+Include "../util/List.def"
+Include "../util/PathTools.def"
+Include "../util/System.def"
+Include "../util/File.def"
+Include "../util/URL.def"
+Include "../util/Date.def"
+Include "../util/Registry.def"
+
+
+Define RESULT_PASSED	"OK"
+Define RESULT_FAILED	"FAILED"
+Define DEBUG_MODE			FALSE
+
+
+Global g_debug As Logical

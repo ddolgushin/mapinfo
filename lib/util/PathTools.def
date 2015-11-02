@@ -1,0 +1,4 @@
+Declare Function PathToDir(ByVal path As String) As String
+Declare Function PathToName(ByVal path As String) As String
+Declare Function PathToNameNoExt(ByVal path As String) As String
+Declare Function PathToExt(ByVal path As String) As String

@@ -1,0 +1,24 @@
+Define LOG_LEVEL_DEBUG		0
+Define LOG_LEVEL_INFO		1
+Define LOG_LEVEL_WARN		2
+Define LOG_LEVEL_ERROR		3
+Define LOG_LEVEL_FATAL		4
+
+Define LOG_MODE_MSGWIN		11
+Define LOG_MODE_FILE		12
+
+Define DEFAULT_LOG_LEVEL	LOG_LEVEL_INFO
+Define DEFAULT_LOG_MODE		LOG_MODE_MSGWIN
+Define DEFAULT_LOG_FILENAME	"logger.log"
+
+
+Declare Sub InitMsgWinLogger(ByVal level As Integer)
+Declare Sub InitFileLogger(ByVal level As Integer, ByVal outputFile As String)
+
+Declare Sub ShutdownLogger()
+Declare Sub SetLogLevel(ByVal level As Integer)
+Declare Sub LogMsg(ByVal level As Integer, ByVal msg As String)
+Declare Sub LogMsgUnformatted(ByVal level As Integer, ByVal msg As String)
+
+Declare Function GetLogLevel() As SmallInt
+Declare Function GetLogMode() As SmallInt

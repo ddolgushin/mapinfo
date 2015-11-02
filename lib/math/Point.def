@@ -1,0 +1,22 @@
+Type Point2D
+	id As Integer
+	x As Float
+	y As Float
+End Type
+
+
+Declare Sub CreatePoint2D(p As Point2D, ByVal x As Float, ByVal y As Float)
+Declare Sub AddPoint2DToArray(arr() As Point2D, p As Point2D)
+Declare Sub AddPoint2DToArrayExt(arr() As Point2D, ByVal x As Float, ByVal y As Float)
+Declare Sub ReorderPoint2DArray(arr() As Point2D, ByVal startIdx As Integer)
+Declare Sub InvertPoint2DArray(arr() As Point2D)
+Declare Sub MergePoint2DArray(arr1() As Point2D, arr2() As Point2D, arrRes() As Point2D)
+Declare Sub RemovePoint2DDubsFromArray(arr() As Point2D)
+Declare Sub CopyPoint2D(pSrc As Point2D, pDst As Point2D)
+Declare Sub CopyPoint2DArray(pArrSrc() As Point2D, pArrDst() As Point2D)
+
+Declare Function Point2DToString(p As Point2D) As String
+Declare Function GetDistanceBetweenPoints2D(p1 As Point2D, p2 As Point2D) As Float
+Declare Function ComparePoints2D(p1 As Point2D, p2 As Point2D) As SmallInt
+
+Declare Function ArraySearchPoint2D(arr() As Point2D, p As Point2D) As Integer

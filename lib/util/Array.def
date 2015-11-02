@@ -1,0 +1,62 @@
+Define MAX_ARRAY_LENGTH	32767
+
+
+'
+' Might be used in case of need to create 2-dimension string array.
+'
+Type StringRow
+	cols() As String
+End Type
+
+
+'
+' Contains set of array functions (add, delete, copy, search) for basic types.
+'
+
+
+Declare Sub AddIntToArray(arr() As Integer, ByVal v As Integer)
+Declare Sub AddIntToArrayHead(arr() As Integer, ByVal v As Integer)
+Declare Sub AddSmallIntToArray(arr() As SmallInt, ByVal v As SmallInt)
+Declare Sub AddSmallIntToArrayHead(arr() As SmallInt, ByVal v As SmallInt)
+Declare Sub AddLogicalToArray(arr() As Logical, ByVal v As Logical)
+Declare Sub AddLogicalToArrayHead(arr() As Logical, ByVal v As Logical)
+Declare Sub AddFloatToArray(arr() As Float, ByVal v As Float)
+Declare Sub AddStringToArray(arr() As String, ByVal v As String)
+Declare Sub AddStringToArrayHead(arr() As String, ByVal v As String)
+Declare Sub AddObjectToArray(arr() As Object, ByVal v As Object)
+
+Declare Sub DelIntFromArray(arr() As Integer, ByVal idx As Integer)
+Declare Sub DelSmallIntFromArray(arr() As SmallInt, ByVal idx As Integer)
+Declare Sub DelLogicalFromArray(arr() As Logical, ByVal idx As Integer)
+Declare Sub DelFloatFromArray(arr() As Float, ByVal idx As Integer)
+Declare Sub DelObjectFromArray(arr() As Object, ByVal idx As Integer)
+Declare Sub DelStringFromArray(arr() As String, ByVal idx As Integer)
+
+Declare Sub CopyIntArray(arrSrc() As Integer, arrDst() As Integer)
+Declare Sub CopySmallIntArray(arrSrc() As SmallInt, arrDst() As SmallInt)
+Declare Sub CopyLogicalArray(arrSrc() As Logical, arrDst() As Logical)
+Declare Sub CopyFloatArray(arrSrc() As Float, arrDst() As Float)
+Declare Sub CopyStringArray(arrSrc() As String, arrDst() As String)
+Declare Sub CopyObjectArray(arrSrc() As Object, arrDst() As Object)
+
+Declare Sub SortStringArray(arr() As String, ByVal reverse As Logical)
+Declare Sub SortStringArrayExt(arr() As String, ByVal reverse As Logical, ByVal treatAsNumber As Logical)
+
+Declare Function ArraySearchInt(arr() As Integer, ByVal v As Integer) As Integer
+Declare Function ArraySearchFloat(arr() As Float, ByVal v As Float) As Integer
+Declare Function ArraySearchString(arr() As String, ByVal v As String) As Integer
+Declare Function ArraySearchStringI(arr() As String, ByVal v As String) As Integer
+Declare Function ArraySearchStringStartingWithI(arr() As String, ByVal v As String) As Integer
+
+Declare Function ArrayCountString(arr() As String, ByVal v As String) As Integer
+
+Declare Function CompareStringArrays(arr1() As String, arr2() As String) As Logical
+
+Declare Function ArrayContainsSubset(arr1() As String, arr2() As String) As Logical
+Declare Function ArrayContainsSubsetExt(arr1() As String, arr2() As String, ByVal ignoreCase As Logical) As Logical
+Declare Function ArraySubtract(arr1() As String, arr2() As String, arrRes() As String) As Integer
+Declare Function ArrayIntersect(arr1() As String, arr2() As String, arrRes() As String) As Integer
+Declare Function ArrayIntersectExt(arr1() As String, arr2() As String, arrRes() As String, ByVal ignoreCase As Logical) As Integer
+Declare Function ArrayUnique(arr() As String, arrRes() As String) As Integer
+Declare Function ArrayUniqueExt(arr() As String, arrRes() As String, ByVal sort As Logical) As Integer
+Declare Function ArrayAdd(arr1() As String, arr2() As String, arrRes() As String) As Integer

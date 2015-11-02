@@ -1,0 +1,661 @@
+Include "mapbasic.def"
+Include "File.def"
+Include "Array.def"
+Include "System.def"
+Include "Logger.def"
+Include "HashTable.def"
+Include "Util.def"
+Include "../math/Util.def"
+
+
+Global gl_openFileIdMap As HashTable
+Global gl_firstLoopCompleted As Logical
+
+
+Declare Function GetFileId() As Integer
+
+
+Declare Function _MoveFile Lib "kernel32.dll" Alias "MoveFileExA"
+	(ByVal oldName As String, ByVal newName As String, ByVal flags As Integer) As Logical
+Declare Function _CopyFile Lib "kernel32.dll" Alias "CopyFileA"
+	(ByVal srcName As String, ByVal dstName As String, ByVal failIfExists As SmallInt) As Logical
+Declare Function _SetFileAttributes Lib "kernel32.dll" Alias "SetFileAttributesA"
+	(ByVal fileName As String, ByVal mask As Integer) As Logical
+Declare Function _GetFileAttributes Lib "kernel32.dll" Alias "GetFileAttributesA"
+	(ByVal fileName As String) As Integer
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Function OpenFile(ByVal fileName As String, ByVal mode As Integer) As Integer
+	OpenFile = OpenFileExt(fileName, mode, "")
+End Function
+
+
+Function OpenFileExt(ByVal fileName As String, ByVal mode As Integer,
+		ByVal charset As String) As Integer
+	Dim newId As Integer
+	
+	newId = -1
+	
+	If mode = FMODE_READ Or mode = FMODE_APPEND Or mode = FMODE_WRITE
+			Or mode = FMODE_BINARY Then
+		newId = GetFileId()
+		
+		If Not (newId >= FILE_ID_START_VALUE
+				And newId < FILE_ID_START_VALUE + FILE_ID_POOL_SIZE) Then
+			Note "Failed to open file (ID: "
+				+ newId + "). Probably, capacity limit reached"
+		Else
+			Call HashTableAdd(gl_openFileIdMap, newId, fileName)
+			
+			If mode = FMODE_READ Then
+				If Len(charset) > 0 Then
+					Open File fileName
+						For Input
+						As # newId
+						CharSet charset
+				Else
+					Open File fileName
+						For Input
+						As # newId
+				End If
+			ElseIf mode = FMODE_WRITE Then
+				If Len(charset) > 0 Then
+					Open File fileName
+						For Output
+						As # newId
+						CharSet charset
+				Else
+					Open File fileName
+						For Output
+						As # newId
+				End If
+			ElseIf mode = FMODE_APPEND Then
+				If Len(charset) > 0 Then
+					Open File fileName
+						For Append
+						As # newId
+						CharSet charset
+				Else
+					Open File fileName
+						For Append
+						As # newId
+				End If
+			ElseIf mode = FMODE_BINARY Then
+				' Charset, even if set, should be omitted.
+				Open File fileName
+					For Binary
+					As # newId
+					ByteOrder LOWHIGH
+			End If
+		End If
+	End If
+	
+	OpenFileExt = newId
+End Function
+
+
+'
+' OpenTempFile is intended to return id of temporary named file.
+'
+Function OpenTempFile() As Integer
+	Dim fileName As String
+	
+	fileName = TempFileName$(GetTempDirectory())
+	OpenTempFile = OpenFile(fileName, FMODE_WRITE)
+End Function
+
+
+'
+' Return temp file name by its id.
+'
+Function GetTempFileName(ByVal fileId As Integer) As String
+	GetTempFileName = HashTableGet(gl_openFileIdMap, Str$(fileId))
+End Function
+
+
+Sub CloseFile(ByVal fileId As Integer)
+	Dim closedFile As String
+	
+	' No initial check in order to be able to close files opened
+	' in a common fasion -- using Open File statement.
+	OnError GoTo skip
+		Close File # fileId
+		
+		GoTo okee
+	
+skip:
+	'
+	' Make it silently because of it is used in automated tests
+	' and thus Note will cause the test to hang.
+	'
+	Call LogMsg(LOG_LEVEL_ERROR, "File is not open: " + fileId)
+	
+okee:
+	If HashTableKeyExists(gl_openFileIdMap, Str$(fileId)) Then
+		closedFile = HashTableDelete(gl_openFileIdMap, Str$(fileId))
+	End If
+
+	OnError GoTo 0
+End Sub
+
+
+'
+' CloseTempFile works the same way as CloseFile, just named to correspond
+' to the type of file it works with.
+'
+Sub CloseTempFile(ByVal fileId As Integer)
+	Call CloseFile(fileId)
+End Sub
+
+
+'
+' Write data to given file.
+'
+' Mode is one of constants defined in .def file, and can be either FMODE_WRITE
+' or FMODE_APPEND.
+'
+Sub FileWrite(ByVal fileName As String, ByVal data As String,
+		ByVal mode As SmallInt)
+	Dim fileId As Integer
+	Dim isModeValid As Logical
+	
+	isModeValid = (mode = FMODE_APPEND Or mode = FMODE_WRITE)
+	
+	If isModeValid Then
+		If mode = FMODE_WRITE Then
+			fileId = OpenFileExt(fileName, FMODE_WRITE, DEFAULT_CHARSET)
+		ElseIf mode = FMODE_APPEND Then
+			fileId = OpenFileExt(fileName, FMODE_APPEND, DEFAULT_CHARSET)
+		End If
+		
+		Print # fileId, data
+		
+		Call CloseFile(fileId)
+	End If
+End Sub
+
+
+'
+' Write array of lines to file.
+'
+Sub FileWriteExt(ByVal fileName As String, data() As String,
+		ByVal mode As SmallInt)
+	Dim i, size As Integer
+	Dim fileId As Integer
+	Dim isModeValid As Logical
+	
+	isModeValid = (mode = FMODE_APPEND Or mode = FMODE_WRITE)
+	size = UBound(data)
+	
+	If isModeValid And size > 0 Then
+		If mode = FMODE_WRITE Then
+			fileId = OpenFileExt(fileName, FMODE_WRITE, DEFAULT_CHARSET)
+		ElseIf mode = FMODE_APPEND Then
+			fileId = OpenFileExt(fileName, FMODE_APPEND, DEFAULT_CHARSET)
+		End If
+		
+		For i = 1 To size
+			Print # fileId, data(i)
+		Next
+		
+		Call CloseFile(fileId)
+	End If
+End Sub
+
+
+'
+' Read file contents to string array using given charset.
+'
+' Note that lines is a simple array and thus has limited (32767) size.
+'
+Function FileReadLinesExt(ByVal fileName As String, lines() As String, ByVal charset As String) As Integer
+	Dim res, fileId, lineCounter, charCounter As Integer
+	Dim str As String
+	Dim isBinary As Logical
+	Dim ch As SmallInt
+	
+	res = 0
+	charCounter = 1
+
+	If Not FileExistsExt(fileName) Then
+		Note "File not found: """ + fileName + """"
+	Else
+		ReDim lines(0)
+		
+		If Len(charset) > 0 Then
+			If charset = CHARSET_UNICODE Then
+				fileId = OpenFile(fileName, FMODE_BINARY)
+				isBinary = TRUE
+			Else
+				fileId = OpenFileExt(fileName, FMODE_READ, charset)
+			End If
+		Else
+			fileId = OpenFile(fileName, FMODE_READ)
+		End If
+		
+		Do While Not EOF(fileId)
+			If lineCounter > MAX_ARRAY_LENGTH Then
+				Call LogMsg(LOG_LEVEL_ERROR, "Maximum array size reached."
+					+ " Cannot read more lines in FileReadLinesExt function")
+				
+				Exit Do
+			Else
+				If Not isBinary Then
+					str = "" ' @03.12.2009: fixed bug - if line is empty, str
+							 ' 		is not initialized by "Line Input" and keeps
+							 ' 		its previous value.
+					
+					Line Input # fileId, str
+					
+					If lineCounter > 0 Or (lineCounter = 0 And Len(str) > 0) Then
+						Call AddStringToArray(lines, str)
+					End If
+					
+					Call Inc(lineCounter)
+				Else
+					Get # fileId,, ch
+					
+					' FEFF = -257 in two-byte SmallInt - first two bytes in Unicode
+					' file (LOWHIGH order).
+					If charCounter = 1 And ch <> -257 Then
+						Call LogMsg(LOG_LEVEL_ERROR, "File is not a valid Unicode file")
+					Else
+						If ch < 0 Or ch > 255 Then
+							If charCounter > 1 Then
+								Call LogMsg(LOG_LEVEL_ERROR, "Invalid character encountered ("
+									+ charCounter + "): " + ch)
+							End If
+						Else
+							If ch = 10 Or ch = 13 Then
+								Call Inc(lineCounter)
+								Call AddStringToArray(lines, str)
+								
+								str = ""
+							Else
+								str = str + Chr$(ch)
+							End If
+						End If
+					End If
+					
+					Call Inc(charCounter)
+				End If
+			End If
+		Loop
+		
+		Call CloseFile(fileId)
+		
+		res = lineCounter
+	End If
+	
+	FileReadLinesExt = res
+End Function
+
+
+Function FileReadLines(ByVal fileName As String, lines() As String) As Integer
+	FileReadLines = FileReadLinesExt(fileName, lines, "")
+End Function
+
+
+'
+' Get list of subdirectories.
+'
+' If fullPath is true, each directory is prepended with full
+' path to it.
+'
+Function GetDirListExt(ByVal targetDir As String, dirs() As String,
+		ByVal fullPath As Logical) As Integer
+	Dim i, size As Integer
+	Dim tmpFileName, tmpStr As String
+	Dim list() As String
+	
+	ReDim dirs(0)
+	
+	If FileExistsExt(targetDir) Then
+		tmpFileName = TempFileName$(GetTempDirectory())
+		
+		Call RunProgramSync("dir /b/ad """ + targetDir + """ > """ + tmpFileName + """")
+		
+		If FileReadLines(tmpFileName, list) > 0 Then
+			size = UBound(list)
+			
+			For i = 1 To size
+				tmpStr = Trim(list(i))
+				
+				If Len(tmpStr) > 0 And FileExistsExt(targetDir + tmpStr) Then
+					If fullPath Then
+						tmpStr = targetDir + tmpStr + "\"
+					End If
+					
+					Call AddStringToArray(dirs, tmpStr)
+				End If
+			Next
+		End If
+		
+		Kill tmpFileName
+	End If
+	
+	GetDirListExt = UBound(dirs)
+End Function
+
+
+'
+' Get list of subdirectories (directly nested only).
+'
+' NOTE: returned list contains just names of subdirectories,
+'       without a full path to them.
+'
+Function GetDirList(ByVal targetDir As String, dirs() As String) As Integer
+	GetDirList = GetDirListExt(targetDir, dirs, FALSE)
+End Function
+
+
+Function MkDir(ByVal path As String) As Logical
+	Dim res As Logical
+	
+	If Not FileExistsExt(path) Then
+		Call RunProgramSync("md """ + path + """")
+		
+		res = FileExistsExt(path)
+	End If
+	
+	MkDir = res
+End Function
+
+
+Function RmDir(ByVal path As String) As Logical
+	Dim res As Logical
+	
+	If FileExistsExt(path) Then
+		Call RunProgramSync("rd /s/q """ + path + """")
+		
+		res = Not FileExistsExt(path)
+	End If
+	
+	RmDir = res
+End Function
+
+
+Function MoveFile(ByVal srcName As String, ByVal dstName As String,
+		ByVal rewrite As Logical) As Logical
+	If EndsWith(srcName, "\") Or EndsWith(srcName, "/") Then
+		srcName = Mid$(srcName, 1, Len(srcName) - 1)
+	End If
+
+	If EndsWith(dstName, "\") Or EndsWith(dstName, "/") Then
+		dstName = Mid$(dstName, 1, Len(dstName) - 1)
+	End If
+
+	MoveFile = _MoveFile(srcName, dstName, rewrite)
+End Function
+
+
+Function CopyFile(ByVal srcName As String, ByVal dstName As String,
+		ByVal failIfExists As Logical) As Logical
+	If EndsWith(srcName, "\") Or EndsWith(srcName, "/") Then
+		srcName = Mid$(srcName, 1, Len(srcName) - 1)
+	End If
+
+	If EndsWith(dstName, "\") Or EndsWith(dstName, "/") Then
+		dstName = Mid$(dstName, 1, Len(dstName) - 1)
+	End If
+
+	CopyFile = _CopyFile(srcName, dstName, failIfExists)
+End Function
+
+
+Function SetFileAttributes(ByVal fileName As String, ByVal mask As Integer) As Logical
+	SetFileAttributes = _SetFileAttributes(fileName, mask)
+End Function
+
+
+Function GetFileAttributes(ByVal fileName As String) As Integer
+	GetFileAttributes = _GetFileAttributes(fileName)
+End Function
+
+
+'
+' Get list of files with "ext" extension located in directory specified by "targetDir".
+' Put found files into "files" array and return true if some files found.
+' Result contains full file names, i.e. including directory.
+'
+' "ext" might contain several extensions, separated by comma, e.g. "jpg,png",
+' or simply an any mark "*".
+'
+Function GetFilesInDirectory(ByVal targetDir As String, ByVal ext As String,
+		ByVal recursively As Logical, files() As String) As Logical
+	Dim res As Logical
+	Dim tmpFile, fileMask, cmd As String
+	Dim tmpArr(), lastDirChar As String
+	Dim i, size As Integer
+	Dim fileName As String
+	Dim extArr() As String
+	Dim targetExpr As String
+	
+	targetDir = Trim(targetDir)
+	
+	If FileExistsExt(targetDir) Then
+		lastDirChar = Mid$(targetDir, Len(targetDir), 1)
+		
+		If Not (lastDirChar = "\" Or lastDirChar = "/") Then
+			targetDir = targetDir + "\"
+		End If
+		
+		tmpFile = TempFileName$(GetTempDirectory())
+		ext = Trim(ext)
+		
+		If ext = "*" Then
+			fileMask = "*"
+			targetExpr = """" + targetDir + fileMask + """"
+		Else
+			Call Split(ext, ",", extArr)
+			
+			size = UBound(extArr)
+			
+			If size > 1 Then
+				For i = 1 To size
+					fileMask = "*." + Trim(extArr(i))
+					targetExpr = targetExpr + """" + targetDir + fileMask + """"
+					
+					If i < size Then targetExpr = targetExpr + " " End If
+				Next
+			Else
+				fileMask = "*." + ext
+				targetExpr = """" + targetDir + fileMask + """"
+			End If
+		End If
+		
+		If recursively Then cmd = "dir " + targetExpr + " /s/b/a-d > " + tmpFile
+		Else cmd = "dir " + targetExpr + " /b/a-d > " + tmpFile End If
+		
+		Call RunProgramSync(cmd)
+		
+		If FileReadLines(tmpFile, tmpArr) > 0 Then End If
+		
+		' Get rid of empty strings
+		size = UBound(tmpArr)
+		
+		ReDim files(0)
+		
+		For i = 1 To size
+			If Len(tmpArr(i)) > 0 Then
+				fileName = tmpArr(i)
+				
+				If Not recursively Then
+					fileName = PathToDirectory$(targetDir) + fileName
+				End If
+				
+				Call AddStringToArray(files, fileName)
+			End If
+		Next
+		
+		res = (UBound(files) > 0)
+		
+		Kill tmpFile
+	End If
+	
+	GetFilesInDirectory = res
+End Function
+
+
+'
+' Find out if file is open by another application and locked
+' for modification.
+'
+Function IsFileLocked(ByVal fileName As String) As Logical
+	Dim res As Logical
+	Dim f, maxAttempts, attemptCounter As Integer
+	Dim newFileName As String
+	
+	maxAttempts = 10
+	
+	Randomize
+	
+	If FileExistsExt(fileName) Then
+		' Unlikely the new name will coincide with some other,
+		' but for sure check it before renaming, and, if needed,
+		' re-generate the name.
+		Do
+			newFileName = fileName + "~" + (Rnd(1) * 100)
+			
+			Call Inc(attemptCounter)
+		Loop While (FileExistsExt(newFileName) And attemptCounter < maxAttempts)
+		
+		If attemptCounter = maxAttempts Then
+			Call LogMsg(LOG_LEVEL_ERROR, "IsFileLocked(...): unable to choose temporary name within "
+				+ maxAttempts + " attempts")
+		Else
+			res = Not MoveFile(fileName, newFileName, FALSE)
+			
+			If Not res Then
+				If MoveFile(newFileName, fileName, FALSE) Then End If
+			End If
+		End If
+	End If
+	
+	IsFileLocked = res
+End Function
+
+
+'
+' Get size of file, in bytes.
+'
+Function GetFileSize(ByVal fileName As String) As Integer
+	Dim res, f As Integer
+	
+	res = -1
+
+	If FileExistsExt(fileName) Then
+		f = OpenFile(fileName, FMODE_READ)
+		
+		If f > 0 Then
+			res = FileAttr(f, FILE_ATTR_FILESIZE)
+		End If
+		
+		Call CloseFile(f)
+	End If
+		
+	GetFileSize = res
+End Function
+
+
+Function DeleteFile(ByVal fileName As String) As Logical
+	Dim res As Logical
+	
+	res = FileExistsExt(fileName)
+	
+	If res Then
+		Kill fileName
+	End If
+	
+	DeleteFile = res
+End Function
+
+
+Function FileExistsExt(ByVal fileName As String) As Logical
+	fileName = Trim(fileName)
+	FileExistsExt = (Len(fileName) > 0 And FileExists(fileName))
+End Function
+
+
+Function CheckFileName(ByVal fileName As String) As Logical
+	Dim res As Logical
+	Dim i, size As Integer
+	Dim ch As String
+	
+	size = Len(fileName)
+	res = (size > 0)
+	
+	For i = 1 To size
+		ch = Mid$(fileName, i, 1)
+		res = Not (ch = "\" Or ch = "/" Or ch = ":" Or ch = "*" Or ch = "?"
+			Or ch = "<" Or ch = ">" Or ch = "|")
+		
+		If Not res Then
+			Exit For
+		End If
+	Next
+	
+	CheckFileName = res
+End Function
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Obtain next free file id.
+'
+Function GetFileId() As Integer
+	Dim res, i, size, upperLimit As Integer
+	Dim key, value As String
+	
+	res = -1
+	
+	If HashTableGetSize(gl_openFileIdMap) = FILE_ID_POOL_SIZE Then
+		Call LogMsg(LOG_LEVEL_ERROR, "No more files can be opened:"
+			+ " capacity limit of " + FILE_ID_POOL_SIZE + " entries is reached")
+	Else
+		upperLimit = FILE_ID_START_VALUE + FILE_ID_POOL_SIZE - 1
+		
+		' If limit wasn't reached yet, just assign the next available number.
+		'
+		' Otherwise check all the interval from the beginning to the end,
+		' to ensure if there are free numbers (e.g. some files were closed).
+		If Not gl_firstLoopCompleted Then
+			size = HashTableGetSize(gl_openFileIdMap)
+			
+			If size = 0 Then
+				res = FILE_ID_START_VALUE
+			Else
+				Call HashTableGetPair(gl_openFileIdMap, size, key, value)
+				
+				res = StrToInt(key) + 1
+			End If
+		Else
+			For i = FILE_ID_START_VALUE To upperLimit
+				If Not HashTableKeyExists(gl_openFileIdMap, i) Then
+					res = i
+					
+					Exit For
+				End If
+			Next
+		End If
+		
+		If Not gl_firstLoopCompleted Then
+			gl_firstLoopCompleted = (res = upperLimit)
+		End If
+	End If
+	
+	GetFileId = res
+End Function

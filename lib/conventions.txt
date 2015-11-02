@@ -1,0 +1,37 @@
+1. Global variables declaraction in library code.
+
+As it can be seen from source code of working modules, global
+variables in it started with prefix "g_". It eases their distinction
+from other data, but can cause name clashes with included library
+modules. As an example: "g_cfg" which holds some configuration data
+might be declared in client application, but the same-named variable
+was (before this convention was introduced) declared by according
+"Config.mb" module, causing compilation errors.
+
+To avoid this it is suggested to name global library variables with
+"gl_" prefix (acronym for "Global in/for Library").
+
+
+2. Function/procedure declaration, indentation, etc.
+
+Indents are made with tabulation symbol.
+
+For the sake of readability code elements, such as functions,
+procedures, types are delimited with double newline.
+
+Logical parts of code inside functions/subs are delimited with single
+line. Variables are declared in its beginning. E.g.:
+
+	Function HeadsOrTails() As Float
+		Dim res As Float
+		
+		Randomize
+		
+		res = Rnd(1)
+		
+		If res < 0.5 Then
+			Print "Got heads"
+		End If
+		
+		MyFoo = res
+	End Function

@@ -1,0 +1,46 @@
+'
+' Auxiliary structure that can store 32767 * 32767 = 1073676289 elements.
+'
+' It currently deals with string and Point2D values.
+'
+Include "../math/Line.def"
+
+
+Define LIST_MAX_CAPACITY	1073676289
+
+
+Type StringListArray
+	items() As String
+End Type
+
+Type StringList
+	magazine() As StringListArray
+	size As Integer
+End Type
+
+
+Declare Sub StringListAdd(list As StringList, ByVal v As String)
+Declare Sub StringListClear(list As StringList)
+
+Declare Function StringListGet(list As StringList, ByVal idx As Integer) As String
+Declare Function StringListGetSize(list As StringList) As Integer
+
+
+Type PointListArray
+	items() As Point2D
+End Type
+
+Type PointList
+	magazine() As PointListArray
+	size As Integer
+End Type
+
+
+Declare Sub PointListAdd(list As PointList, v As Point2D)
+Declare Sub PointListClear(list As PointList)
+Declare Sub PointListGet(list As PointList, ByVal idx As Integer, res As Point2D)
+Declare Sub PointListCopy(src As PointList, dst As PointList)
+Declare Sub PointListReorder(list As PointList, ByVal startIdx As Integer)
+Declare Sub PointListInvert(list As PointList)
+
+Declare Function PointListGetSize(list As PointList) As Integer

@@ -1,0 +1,103 @@
+Include "IniTools.def"
+Include "Util.def"
+Include "File.def"
+
+
+Declare Function ConvertForIni(ByVal value As String) As String
+Declare Function ConvertFromIni(ByVal value As String) As String
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Function ReadIni(ByVal filename As String, cfg As HashTable) As Logical
+	Dim res As Logical
+	
+	res = FileExistsExt(filename)
+	
+	If res Then
+		Dim s, pair(), firstChar As String
+		Dim fileId, size As Integer
+		
+		fileId = OpenFile(fileName, FMODE_READ)
+		
+		Do While Not EOF(fileId)
+			Line Input # fileId, s
+			
+			firstChar = Left$(s, 1)
+			
+			If StringCompare(firstChar, "'") <> 0
+				And StringCompare(firstChar, "#") <> 0
+				And StringCompare(firstChar, "//") <> 0 Then ' Not a comment.
+				
+				ReDim pair(0)
+				Call Split(s, "=", pair)
+				
+				size = UBound(pair)
+				
+				If size = 1 Then
+					Call HashTableAdd(cfg, pair(1), "")
+				ElseIf size = 2 Then
+					Call HashTableAdd(cfg, pair(1), ConvertFromIni(pair(2)))
+				ElseIf size > 2 Then
+					Dim tail, tailChunks() As String
+					Dim i As Integer
+					
+					ReDim tailChunks(size - 1)
+					
+					For i = 2 To size
+						tailChunks(i - 1) = pair(i)
+					Next
+					
+					tail = Join(tailChunks, "=")
+					
+					Call HashTableAdd(cfg, pair(1), ConvertFromIni(tail))
+				End If
+			End If
+		Loop
+		
+		Call CloseFile(fileId)
+	End If
+	
+	ReadIni = res
+End Function
+
+
+Sub WriteIni(ByVal fileName As String, cfg As HashTable)
+	Dim fileId, size, i As Integer
+	Dim keys(), str As String
+	
+	Call HashTableGetKeys(cfg, keys)
+	
+	size = UBound(keys)
+	fileId = OpenFile(fileName, FMODE_WRITE)
+	
+	For i = 1 To size
+		str = keys(i) + "=" + ConvertForIni(HashTableGet(cfg, keys(i)))
+		
+		Print # fileId, str + Chr$(13)
+	Next
+	
+	Call CloseFile(fileId)
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Function ConvertForIni(ByVal value As String) As String
+	ConvertForIni = StrReplace("""", """""", value)
+End Function
+
+
+Function ConvertFromIni(ByVal value As String) As String
+	ConvertFromIni = StrReplace("""""", """", value)
+End Function

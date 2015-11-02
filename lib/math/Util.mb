@@ -1,0 +1,173 @@
+Include "mapbasic.def"
+Include "Util.def"
+Include "../util/Util.def"
+
+
+Declare Function GetExt(ByVal min As Float, arr() As Float) As Float
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub SwapI(v1 As Integer, v2 As Integer)
+	Dim tmp As Integer
+	
+	tmp = v1
+	v1 = v2
+	v2 = tmp
+End Sub
+
+
+Sub SwapF(v1 As Float, v2 As Float)
+	Dim tmp As Float
+	
+	tmp = v1
+	v1 = v2
+	v2 = tmp
+End Sub
+
+
+Function GetAverage(arr() As Float) As Float
+	Dim count, i As Integer
+	Dim remainder As Float
+	Dim res As Float
+
+	count = UBound(arr)
+	
+	If count > 0 Then
+		For i = 1 To count
+			remainder = remainder + arr(i)
+		Next
+		
+		res = remainder / count
+	Else
+		res = 0
+	End If
+	
+	GetAverage = res
+End Function
+
+
+'
+' Extract degree and minute from float degree value.
+'
+Sub FloatDegreeToDegMin(ByVal deg As Float, d As Float, m As Float)
+	d = Fix(deg)
+	m = (deg - d) * 60.0
+End Sub
+
+
+Sub FloatDegreeToDegMinSec(ByVal deg As Float, d As Float, m As Float, s As Float)
+	d = Fix(deg)
+	m = Fix((deg - d) * 60.0)
+	s = ((deg - d) * 60.0 - m) * 60.0
+End Sub
+
+
+Function Fact(ByVal n As Integer) As Integer
+	Fact = n
+	
+	If n > 1 Then
+		Fact = n * Fact(n - 1)
+	End If
+End Function
+
+
+Function GetMin(arr() As Float) As Float
+	GetMin = GetExt(1, arr)
+End Function
+
+
+Function GetMax(arr() As Float) As Float
+	GetMax = GetExt(0, arr)
+End Function
+
+
+Function GetMin2(ByVal v1 As Float, ByVal v2 As Float) As Float
+	Dim res As Float
+	
+	If v1 < v2 Then
+		res = v1
+	Else
+		res = v2
+	End If
+	
+	GetMin2 = res
+End Function
+
+
+Function GetMax2(ByVal v1 As Float, ByVal v2 As Float) As Float
+	Dim res As Float
+	
+	If v1 > v2 Then
+		res = v1
+	Else
+		res = v2
+	End If
+	
+	GetMax2 = res
+End Function
+
+
+Sub Inc(v As Integer)
+	v = v + 1
+End Sub
+
+
+Sub Dec(v As Integer)
+	v = v - 1
+End Sub
+
+
+Function DegreeToString(ByVal deg As Float, ByVal min As Float,
+		ByVal sec As Float, ByVal outType As SmallInt, ByVal prec As SmallInt) As String
+	Dim res As String
+	
+	If Not (outType = DEGREE_DMS Or outType = DEGREE_DM Or outType = DEGREE_D) Then
+		outType = DEGREE_DMS
+	End If
+	
+	If outType = DEGREE_DMS Then
+		res = deg + Chr$(176)
+			+ min + Chr$(146)
+			+ PrepareFloatExt(sec, prec, TRUE) + Chr$(148)
+	ElseIf outType = DEGREE_DM Then
+		res = deg + Chr$(176)
+			+ PrepareFloatExt(min, prec, TRUE) + Chr$(146)
+	ElseIf outType = DEGREE_D Then
+		res = PrepareFloatExt(deg, prec, TRUE) + Chr$(176)
+	End If
+	
+	DegreeToString = res
+End Function
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Function GetExt(ByVal min As Float, arr() As Float) As Float
+	Dim res As Float
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If size > 0 Then
+		res = arr(1)
+		
+		For i = 2 To size
+			If (min And arr(i) < res) Or (Not min And arr(i) > res) Then
+				res = arr(i)
+			End If
+		Next
+	End If
+	
+	GetExt = res
+End Function

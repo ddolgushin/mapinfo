@@ -1,0 +1,11 @@
+Define MAX_BUF_RES		100
+Define MIN_BUF_RES		3
+
+
+Declare Function IsObjectSingle(o As Object) As Logical
+Declare Function IsObjectMulticontour(o As Object) As Logical
+Declare Function IsObjectNull(o As Object) As Logical
+Declare Function IsObjectEmpty(o As Object) As Logical
+Declare Function CompareObjects(o1 As Object, o2 As Object) As SmallInt
+Declare Function CompareStyles(o1 As Object, o2 As Object, ByVal windowId As Integer) As Logical
+Declare Function GetObjectTypeName(ByVal code As Integer) As String

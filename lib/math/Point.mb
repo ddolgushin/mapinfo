@@ -1,0 +1,254 @@
+Include "mapbasic.def"
+Include "Point.def"
+Include "../util/Util.def"
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub CreatePoint2D(p As Point2D, ByVal x As Float, ByVal y As Float)
+	p.id = -1
+	p.x = x
+	p.y = y
+End Sub
+
+
+Sub AddPoint2DToArray(arr() As Point2D, p As Point2D)
+	Dim size As Integer
+
+	size = UBound(arr) + 1
+
+	ReDim arr(size)
+	
+	Call CopyPoint2D(p, arr(size))
+End Sub
+
+
+Sub AddPoint2DToArrayExt(arr() As Point2D, ByVal x As Float, ByVal y As Float)
+	Dim size As Integer
+
+	size = UBound(arr) + 1
+
+	ReDim arr(size)
+	
+	arr(size).x = x
+	arr(size).y = y
+End Sub
+
+
+'
+' Invert array elements.
+'
+Sub InvertPoint2DArray(arr() As Point2D)
+	Dim newArr() As Point2D
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If size > 0 Then
+		ReDim newArr(size)
+		
+		For i = size To 1 Step -1
+			Call CopyPoint2D(arr(i), newArr(size - i + 1))
+		Next
+		
+		Call CopyPoint2DArray(newArr, arr)
+	End If
+End Sub
+
+
+'
+' Make startIdx element first in array.
+'
+Sub ReorderPoint2DArray(arr() As Point2D, ByVal startIdx As Integer)
+	Dim newArr() As Point2D
+	Dim size, i, newIdx As Integer
+	Dim letsRoll, isSecondLoop As Logical
+	
+	If startIdx <= UBound(arr) And startIdx > 0 Then
+		size = UBound(arr)
+		i = startIdx
+		letsRoll = startIdx <> 1
+		newIdx = 1
+		
+		ReDim newArr(size)
+		
+		Do While TRUE
+			Call CopyPoint2D(arr(i), newArr(newIdx))
+			
+			i = i + 1
+			
+			If letsRoll Then
+				If Not isSecondLoop And i > size Then
+					i = 1
+					isSecondLoop = TRUE
+				ElseIf isSecondLoop And i >= startIdx Then
+					Exit Do
+				End If
+			Else
+				If i > size Then
+					Exit Do
+				End If
+			End If
+			
+			newIdx = newIdx + 1
+		Loop
+		
+		Call CopyPoint2DArray(newArr, arr)
+	End If
+End Sub
+
+
+Sub MergePoint2DArray(arr1() As Point2D, arr2() As Point2D, arrRes() As Point2D)
+	Dim i, firstLimit, newLen As Integer
+	Dim tmpArr1(), tmpArr2() As Point2D
+	
+	firstLimit = UBound(arr1)
+	newLen = firstLimit + UBound(arr2)
+	
+	ReDim arrRes(newLen)
+	
+	Call CopyPoint2DArray(arr1, tmpArr1)
+	Call CopyPoint2DArray(arr2, tmpArr2)
+	
+	For i = 1 To newLen
+		If i <= firstLimit Then
+			Call CopyPoint2D(tmpArr1(i), arrRes(i))
+		Else
+			Call CopyPoint2D(tmpArr2(i - firstLimit), arrRes(i))
+		End If
+	Next
+End Sub
+
+
+Sub RemovePoint2DDubsFromArray(arr() As Point2D)
+	Dim tmpArr(), p As Point2D
+	Dim i, j, arrSize As Integer
+	Dim exclude As Logical
+	
+	Call CopyPoint2DArray(arr, tmpArr)
+	ReDim arr(0)
+	
+	arrSize = UBound(tmpArr)
+	
+	' Remove last dub with greater position.
+	For i = arrSize To 1 Step -1
+		exclude = 0
+		
+		Call CreatePoint2D(p, tmpArr(i).x, tmpArr(i).y)
+		
+		For j = i - 1 To 1 Step -1
+			If p.x = tmpArr(j).x And p.y = tmpArr(j).y Then
+				'Print "Point excluded: " + Point2DToString(p)
+				
+				exclude = 1
+				
+				Exit For
+			End If
+		Next
+		
+		If Not exclude Then
+			Call AddPoint2DToArray(arr, p)
+		End If
+	Next
+	
+	Call CopyPoint2DArray(arr, tmpArr)
+	
+	arrSize = UBound(arr)
+	
+	ReDim arr(0)
+	
+	' Revert array back, as it was.
+	For i = 1 To arrSize
+		Call AddPoint2DToArray(arr, tmpArr(arrSize - i + 1))
+	Next
+End Sub
+
+
+Sub CopyPoint2D(pSrc As Point2D, pDst As Point2D)
+	pDst.id = pSrc.id
+	
+	pDst.x = pSrc.x
+	pDst.y = pSrc.y
+End Sub
+
+
+Sub CopyPoint2DArray(pArrSrc() As Point2D, pArrDst() As Point2D)
+	Dim count, i As Integer
+	
+	count = UBound(pArrSrc)
+	
+	ReDim pArrDst(count)
+	
+	For i = 1 To count
+		Call CopyPoint2D(pArrSrc(i), pArrDst(i))
+	Next
+End Sub
+
+
+Function Point2DToString(p As Point2D) As String
+	Dim prefix As String
+	
+	If p.id > 0 Then
+		prefix = "id: " + p.id + " "
+	End If
+	
+	Point2DToString = prefix
+		+ "("
+			+ PrepareFloatExt(p.x, DEFAULT_FLOAT_PREC, TRUE)
+			+ "; "
+			+ PrepareFloatExt(p.y, DEFAULT_FLOAT_PREC, TRUE)
+		+ ")"
+End Function
+
+
+Function GetDistanceBetweenPoints2D(p1 As Point2D, p2 As Point2D) As Float
+	GetDistanceBetweenPoints2D = Sqr((p2.x - p1.x) ^ 2 + (p2.y - p1.y) ^ 2)
+End Function
+
+
+'
+' Compare points by their distance from zero point.
+'
+Function ComparePoints2D(p1 As Point2D, p2 As Point2D) As SmallInt
+	Dim c As Point2D
+	Dim d1, d2 As Float
+	
+	Call CreatePoint2D(c, 0, 0)
+	
+	d1 = GetDistanceBetweenPoints2D(c, p1)
+	d2 = GetDistanceBetweenPoints2D(c, p2)
+
+	If p1.x = p2.x And p1.y = p2.y Then
+		ComparePoints2D = 0
+	ElseIf d1 > d2 Then
+		ComparePoints2D = 1
+	ElseIf d1 < d2 Then
+		ComparePoints2D = -1
+	End If
+End Function
+
+
+Function ArraySearchPoint2D(arr() As Point2D, p As Point2D) As Integer
+	Dim size, res As Integer
+	Dim i As Integer
+	
+	size = UBound(arr)
+	res = -1
+	
+	If size > 0 Then
+		For i = 1 To size
+			If arr(i).x = p.x And arr(i).y = p.y Then
+				res = i
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	ArraySearchPoint2D = res
+End Function

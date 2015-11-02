@@ -1,0 +1,351 @@
+Include "mapbasic.def"
+Include "MapTools.def"
+Include "Logger.def"
+Include "File.def"
+Include "../util/Util.def"
+Include "../util/Array.def"
+Include "../table/TableTools.def"
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub CreateMapFor(tables() As String)
+	Dim i, size, winId As Integer
+	Dim tableName As String
+	Dim mapCreated As Logical
+	
+	size = UBound(tables)
+	
+	For i = 1 To size
+		tableName = tables(i)
+		
+		If Not IsTableOpen(tableName) And FileExistsExt(tableName) Then
+			tableName = OpenTable(tableName)
+		End If
+		
+		If Not IsTableOpen(tableName) Then
+			Call LogMsg(LOG_LEVEL_ERROR, "Unable to open the layer: """ + tables(i) + """")
+		Else
+			If Not mapCreated Then
+				Map From tableName
+				
+				winId = FrontWindow()
+				mapCreated = TRUE
+			Else
+				Call AddLayer(winId, tableName)
+			End If
+		End If
+	Next
+	
+	Set Map Window winId Zoom Entire
+End Sub
+
+
+Sub AddLayer(ByVal winId As Integer, ByVal layerName As String)
+	If winId > 0 Then
+		If IsTableOpen(layerName) Then
+			If TableInfo(layerName, TAB_INFO_MAPPABLE)
+					And Not WindowContainsLayer(winId, layerName) Then
+				Run Command "Add Map Window " + winId + " Auto Layer " + layerName
+			End If
+		End If
+	End If
+End Sub
+
+
+Sub RemoveLayer(ByVal winId As Integer, ByVal layerName As String)
+	If winId > 0 Then
+		If IsTableOpen(layerName) Then
+			If TableInfo(layerName, TAB_INFO_MAPPABLE)
+					And WindowContainsLayer(winId, layerName) Then
+				Run Command "Remove Map Window " + winId + " Layer " + layerName
+			End If
+		End If
+	End If
+End Sub
+
+
+Sub AddLayers(ByVal winId As Integer, layers() As String)
+	Dim i, size As Integer
+	
+	size = UBound(layers)
+	
+	If size > 0 And winId > 0 Then
+		Set Map Window winId Redraw Off
+		
+		For i = 1 To size
+			Call AddLayer(winId, layers(i))
+		Next
+		
+		Set Map Window winId Redraw On
+	End If
+End Sub
+
+
+Sub GetLayers(ByVal winId As Integer, layers() As String)
+	Call GetLayersExt(winId, layers, FALSE)
+End Sub
+
+
+Sub GetLayersExt(ByVal winId As Integer, layers() As String,
+		ByVal onlyVisible As Logical)
+	Dim i, size As Integer
+	Dim layerName As String
+	Dim shouldAdd As Logical
+	
+	ReDim layers(0)
+	
+	If winId > 0 Then
+		size = MapperInfo(winId, MAPPER_INFO_LAYERS)
+		
+		For i = 1 To size
+			shouldAdd = ((Not onlyVisible)
+				Or (onlyVisible And LayerInfo(winId, i, LAYER_INFO_DISPLAY)
+					<> LAYER_INFO_DISPLAY_OFF))
+			
+			If shouldAdd Then
+				layerName = LayerInfo(winId, i, LAYER_INFO_NAME)
+				
+				Call AddStringToArray(layers, layerName)
+			End If
+		Next
+	End If
+End Sub
+
+
+Sub RemoveLayers(ByVal winId As Integer, layers() As String)
+	Dim i, size As Integer
+	
+	size = UBound(layers)
+	
+	If size > 0 And winId > 0 Then
+		Set Map Window winId Redraw Off
+		
+		For i = 1 To size
+			Call RemoveLayer(winId, layers(i))
+		Next
+		
+		Set Map Window winId Redraw On
+	End If
+End Sub
+
+
+'
+' Put maps from layers array on the map instead of those already
+' shown on it.
+'
+Sub ReplaceLayers(ByVal winId As Integer, layers() As String)
+	Dim i, layerCount, size As Integer
+	Dim tableName, lastLayerName As String
+	
+	size = UBound(layers)
+	
+	If size > 0 And winId > 0 Then
+		Set Map Window winId Redraw Off
+		
+		layerCount = MapperInfo(winId, MAPPER_INFO_LAYERS)
+		
+		For i = layerCount To 2 Step -1
+			tableName = LayerInfo(winId, i, LAYER_INFO_NAME)
+			
+			Call RemoveLayer(winId, tableName)
+		Next
+		
+		lastLayerName = LayerInfo(winId, 1, LAYER_INFO_NAME)
+		
+		For i = 1 To size
+			tableName = layers(i)
+			
+			Call AddLayer(winId, tableName)
+			Call DisableScaleLimit(winId, tableName)
+			
+			If i = 1 And StringCompare(lastLayerName, tableName) <> 0 Then
+				Call RemoveLayer(winId, lastLayerName)
+			End If
+		Next
+		
+		Set Map Window winId Redraw On
+	End If
+End Sub
+
+
+'
+' Enable/disable edit mode for given map.
+'
+Sub SetLayerEditable(ByVal winId As Integer, layer As String, ByVal flag As Logical)
+	Dim cmd As String
+	
+	If WindowContainsLayer(winId, layer) Then
+		cmd = "Set Map Window " + winId + " Layer " + layer + " Editable "
+		
+		If flag Then
+			cmd = cmd + "On"
+		Else
+			cmd = cmd + "Off"
+		End If
+		
+		Run Command cmd
+	End If
+End Sub
+
+
+Sub SetLayerVisible(ByVal winId As Integer, layer As String,
+		ByVal flag As Logical)
+	Dim cmd As String
+	
+	If WindowContainsLayer(winId, layer) Then
+		cmd = "Set Map Window " + winId + " Layer " + layer + " Display "
+		
+		If flag Then
+			cmd = cmd + "Graphic"
+		Else
+			cmd = cmd + "Off"
+		End If
+		
+		Run Command cmd
+	End If
+End Sub
+
+
+Function GetLayerNum(ByVal winId As Integer, ByVal layerName As String) As Integer
+	Dim res, i, size As Integer
+	Dim tmpName As String
+	
+	res = -1
+	
+	If WindowInfo(winId, WIN_INFO_TYPE) = WIN_MAPPER Then
+		size = MapperInfo(winId, MAPPER_INFO_LAYERS)
+		layerName = UCase$(layerName)
+		
+		For i = 1 To size
+			tmpName = UCase$(LayerInfo(winId, i, LAYER_INFO_NAME))
+			
+			If layerName = tmpName Then
+				res = i
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	GetLayerNum = res
+End Function
+
+
+'
+' Turn off show-by-scale limitation for layer.
+'
+Sub DisableScaleLimit(winId As Integer, ByVal tableName As String)
+	Dim layerCount, layerIdx, i As Integer
+	Dim zoomMin, zoomMax As Float
+	
+	If winId > 0 Then
+		layerCount = MapperInfo(winId, MAPPER_INFO_LAYERS)
+		
+		For i = 1 To layerCount
+			If LayerInfo(winId, i, LAYER_INFO_NAME) = tableName Then
+				layerIdx = i
+				
+				Exit For
+			End If
+		Next
+		
+		If layerIdx > 0 Then
+			zoomMin = LayerInfo(winId, layerIdx, LAYER_INFO_ZOOM_MIN)
+			zoomMax = LayerInfo(winId, layerIdx, LAYER_INFO_ZOOM_MAX)
+			
+			Set Map
+				Window winId
+					Layer layerIdx
+						Zoom (zoomMin, zoomMax) Off
+		End If
+	End If
+End Sub
+
+
+'
+' Find out whether the mapper contains given layer.
+'
+Function WindowContainsLayer(winId As Integer, layerName As String) As Logical
+	Dim i, size As Integer
+	Dim res As Logical
+	
+	If winId > 0 Then
+		size = MapperInfo(winId, MAPPER_INFO_LAYERS)
+		
+		For i = 1 To size
+			If LayerInfo(winId, i, LAYER_INFO_NAME) = layerName Then
+				res = TRUE
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	WindowContainsLayer = res
+End Function
+
+
+'
+' If there's a window with any layer name equal to layerName - return
+' this window's ID.
+'
+' If onlyFirst is true, check only the first layer.
+'
+Function GetWindowID(layerName As String, ByVal onlyFirst As Logical) As Integer
+	Dim i, j, size As Integer
+	Dim tmpId, res, layerCount As Integer
+	
+	size = NumWindows()
+	
+	For i = 1 To size
+		If WindowInfo(i, WIN_INFO_TYPE) = WIN_MAPPER Then
+			tmpId = WindowInfo(i, WIN_INFO_WINDOWID)
+			layerCount = MapperInfo(tmpId, MAPPER_INFO_LAYERS)
+			
+			For j = 1 To layerCount
+				If LayerInfo(tmpId, j, LAYER_INFO_NAME) = layerName Then
+					res = tmpId
+					
+					Exit For
+				End If
+				
+				If j = 1 And onlyFirst Then
+					Exit For
+				End If
+			Next
+		End If
+	Next
+	
+	GetWindowID = res
+End Function
+
+
+'
+' Get first map window ID.
+'
+Function GetFirstMapperID() As Integer
+	Dim res, i, size As Integer
+	
+	size = NumWindows()
+	res = -1
+	
+	For i = 1 To size
+		If WindowInfo(i, WIN_INFO_TYPE) = WIN_MAPPER Then
+			res = i
+			
+			Exit For
+		End If
+	Next
+	
+	If res > 0 Then
+		res = WindowID(res)
+	End If
+	
+	GetFirstMapperID = res
+End Function

@@ -1,0 +1,266 @@
+Include "mapbasic.def"
+Include "Matrix.def"
+
+
+Declare Function CheckIndex(m As Matrix, ByVal r As Integer, ByVal c As Integer)
+	As Logical
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub MultiplyMatrices(m1 As Matrix, m2 As Matrix, result As Matrix)
+	Dim m1rc, m1cc, m2rc, m2cc As Integer
+	Dim i, j, i1, j1 As Integer
+	Dim m1v, m2v, v As Float
+	
+	Call GetMatrixSize(m1, m1rc, m1cc)
+	Call GetMatrixSize(m2, m2rc, m2cc)
+
+	If m1cc <> m2rc Then
+		Note "Cannot multiply given matrices: number of columns in first"
+			+ " one shall be equal to the number of rows in second one"
+	Else
+		Call SetMatrixSize(result, m1rc, m2cc)
+		
+		For i = 1 To m1rc
+			' Resulting matrix will have the amount of rows from first m,
+			' and amount of cols from second.
+			For j = 1 To m2cc
+				v = 0
+				
+				For i1 = 1 To m1cc
+					m1v = m1.rows(i).cols(i1)
+					m2v = m2.rows(i1).cols(j)
+					
+					v = v + m1v * m2v
+					
+					'Print "m1[" + i + "][" + i1 + "]=" + m1v + ", m2[" + i1 + "][" + j + "]=" + m2v + ", result=" + v
+				Next
+				
+				result.rows(i).cols(j) = v
+			Next
+		Next
+	End If
+End Sub
+
+
+Sub TransposeMatrix(m As Matrix, result As Matrix)
+	Dim rc, cc, i, j As Integer
+	Dim elem As Float
+	
+	Call GetMatrixSize(m, rc, cc)
+	Call SetMatrixSize(result, cc, rc)
+	
+	For i = 1 To rc
+		For j = 1 To cc
+			elem = GetElem(m, i, j)
+			
+			Call SetElem(result, elem, j, i)
+		Next
+	Next
+End Sub
+	
+
+Function MatrixToString(m As Matrix) As String
+	Dim rowCount, colCount, i, j As Integer
+	Dim result As String
+	
+	Call GetMatrixSize(m, rowCount, colCount)
+	
+	For i = 1 To rowCount
+		For j = 1 To colCount
+			result = result + m.rows(i).cols(j)
+			
+			If j = colCount Then
+				result = result + Chr$(13)
+			Else
+				result = result + "   "
+			End If
+		Next
+	Next
+	
+	MatrixToString = result
+End Function
+
+
+Sub AddElemToRow(r As MatrixRow, ByVal value As Float)
+	Dim newSize As Integer
+	
+	newSize = UBound(r.cols) + 1
+
+	ReDim r.cols(newSize)
+	
+	r.cols(newSize) = value
+End Sub
+
+
+Sub ClearRow(r As MatrixRow)
+	ReDim r.cols(0)
+End Sub
+
+
+Sub ClearMatrix(m As Matrix)
+	ReDim m.rows(0)
+End Sub
+
+
+Sub AddRow(m As Matrix, row As MatrixRow)
+	Dim oldSize, newSize As Integer
+	Dim canProceed As Logical
+	
+	oldSize = UBound(m.rows)
+	canProceed = TRUE
+	
+	' if there are some rows in matrix and a new row is not fit by size
+	If oldSize > 0 Then
+		If Not UBound(m.rows(1).cols) = UBound(row.cols) Then
+			Note "The row being added has incompatible size"
+			
+			canProceed = FALSE
+		End If
+	End If
+	
+	If canProceed Then
+		newSize = oldSize + 1
+
+		ReDim m.rows(newSize)
+		
+		Call CopyRow(row, m.rows(newSize))
+	End If
+End Sub
+
+
+Sub CopyRow(rs As MatrixRow, rd As MatrixRow)
+	Dim rsSize, rdSize, i As Integer
+	
+	rsSize = UBound(rs.cols)
+	rdSize = UBound(rd.cols)
+
+	' if not equal by size, resize destination row
+	If Not rsSize = rdSize Then
+		ReDim rd.cols(rsSize)
+	End If
+	
+	For i = 1 To rsSize
+		rd.cols(i) = rs.cols(i)
+	Next
+End Sub
+
+
+Sub CopyMatrix(ms As Matrix, md As Matrix)
+	Dim rc, cc, i, j As Integer
+	
+	Call GetMatrixSize(ms, rc, cc)
+	Call SetMatrixSize(md, rc, cc)
+	
+	For i = 1 To rc
+		For j = 1 To cc
+			Call SetElem(md, GetElem(ms, i, j), i, j)
+		Next
+	Next
+End Sub
+
+
+'
+' True if matrices are equal.
+'
+Function CompareMatrices(m1 As Matrix, m2 As Matrix) As Logical
+	Dim res As Logical
+	Dim rc1, cc1, rc2, cc2, i, j As Integer
+	
+	res = TRUE
+	
+	Call GetMatrixSize(m1, rc1, cc1)
+	Call GetMatrixSize(m2, rc2, cc2)
+	
+	If rc1 <> rc2 Or cc1 <> cc2 Then
+		res = FALSE
+	Else
+		For i = 1 To rc1
+			For j = 1 To rc2
+				If GetElem(m1, i, j) <> GetElem(m2, i, j) Then
+					res = FALSE
+					
+					Exit For
+				End If
+			Next
+			
+			If Not res Then
+				Exit For
+			End If
+		Next
+	End If
+	
+	CompareMatrices = res
+End Function
+
+
+Sub GetMatrixSize(m As Matrix, rc As Integer, cc As Integer)
+	rc = UBound(m.rows)
+	cc = UBound(m.rows(1).cols)
+End Sub
+
+
+Sub SetMatrixSize(m As Matrix, rc As Integer, cc As Integer)
+	Dim i As Integer
+	Dim row As MatrixRow
+
+	ReDim m.rows(0)
+	
+	For i = 1 To rc
+		ReDim row.cols(cc)
+		
+		Call AddRow(m, row)
+	Next
+End Sub
+
+
+Function GetElem(m As Matrix, ByVal r As Integer, ByVal c As Integer) As Float
+	If CheckIndex(m, r, c) Then
+		GetElem = m.rows(r).cols(c)
+	End If
+End Function
+
+
+Sub SetElem(m As Matrix, ByVal v As Float, ByVal r As Integer, ByVal c As Integer)
+	If CheckIndex(m, r, c) Then
+		m.rows(r).cols(c) = v
+	End If
+End Sub
+
+
+Function CheckIndex(m As Matrix, ByVal r As Integer, ByVal c As Integer) As Logical
+	Dim rc, cc As Integer
+	
+	Call GetMatrixSize(m, rc, cc)
+	
+	CheckIndex = 1
+	
+	If r < 1 Or r > rc Or c < 1 Or c > cc Then
+		Note "Index out of bounds"
+		
+		CheckIndex = 0
+	End If
+End Function
+
+
+Sub CreateRow(row As MatrixRow, arr() As Float)
+	Dim arrSize, i As Integer
+	
+	arrSize = UBound(arr)
+	
+	If arrSize = 0 Then
+		Note "Given array is empty, no sense to create matrix row"
+	Else
+		ReDim row.cols(arrSize)
+		
+		For i = 1 To arrSize
+			row.cols(i) = arr(i)
+		Next
+	End If
+End Sub

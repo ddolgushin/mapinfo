@@ -1,0 +1,8 @@
+Declare Sub IntToBinary(ByVal a As Integer, b() As Logical)
+
+Declare Function BitwiseAnd(ByVal a As Integer, ByVal b As Integer) As Integer
+Declare Function BitwiseOr(ByVal a As Integer, ByVal b As Integer) As Integer
+Declare Function BitwiseXor(ByVal a As Integer, ByVal b As Integer) As Integer
+Declare Function BitwiseNot(ByVal a As Integer) As Integer
+Declare Function BinaryToInt(a() As Logical) As Integer
+Declare Function BinaryToString(a() As Logical) As String

@@ -1,0 +1,7 @@
+Declare Function TestList() As String
+Declare Function TestPathTools() As String
+Declare Function TestGetFileId() As String
+Declare Function TestURL() As String
+Declare Function TestStartsEndsWith() As String
+Declare Function TestDateTimeParser() As String
+Declare Function TestFileSizeToBytes() As String

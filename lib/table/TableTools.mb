@@ -1,0 +1,1836 @@
+Include "mapbasic.def"
+Include "TableTools.def"
+Include "EncodingTools.def"
+Include "../util/Array.def"
+Include "../util/HashTable.def"
+Include "../util/Util.def"
+Include "../util/File.def"
+Include "../util/PathTools.def"
+Include "../util/Logger.def"
+Include "../util/System.def"
+Include "../math/Util.def"
+
+
+Global gl_backupTablesPool() As String ' Created backup tables' pool
+Global gl_openTables As HashTable ' Open tables pool, keeps correspondence
+								 ' of table file name and its system name,
+								 ' helps to avoid name conflicts
+
+Declare Sub ClearTableInfo(info As TabInfo)
+Declare Sub FilterTablesBySelection(srcList() As String, resList() As String)
+Declare Sub GetLargeFieldParts(ByVal tableName As String, ByVal fieldName As String,
+	cols() As String)
+
+Declare Function ColDefsToString(colDefs() As ColInfo) As String
+Declare Function ColInfoToString(ci As ColInfo) As String
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Removes whitespaces in strings like "a; b; c" => "a;b;c".
+'
+Function PackSVS(ByVal src As String, ByVal delim As String) As String
+	Dim res As String
+	Dim chunks() As String
+	Dim i, size As Integer
+	
+	Call Split(src, delim, chunks)
+	
+	size = UBound(chunks)
+	
+	For i = 1 To size
+		chunks(i) = Trim(chunks(i))
+	Next
+	
+	If UBound(chunks) > 1 Then res = Join(chunks, delim)
+	Else res = Trim(src) End If
+	
+	PackSVS = res
+End Function
+
+
+Function UnpackSVS(ByVal src As String, ByVal delim As String) As String
+	Dim res As String
+	Dim chunks() As String
+	
+	res = PackSVS(src, delim)
+	
+	Call Split(res, delim, chunks)
+	
+	res = Join(chunks, delim + " ")
+	
+	UnpackSVS = res
+End Function
+
+
+'
+' Get list of opened tables.
+'
+Sub GetOpenTablesList(list() As String)
+	Dim tableCount, i As Integer
+	
+	tableCount = NumTables()
+	
+	ReDim list(tableCount)
+	
+	For i = 1 To tableCount
+		list(i) = TableInfo(i, TAB_INFO_NAME)
+	Next
+End Sub
+
+
+'
+' Get open tables list with blank item in head.
+'
+Sub GetOpenTablesListExt(list() As String, ByVal addBlank As Logical)
+	Call GetOpenTablesList(list)
+	
+	If addBlank Then
+		Call AddStringToArrayHead(list, " ")
+	End If
+End Sub
+
+
+'
+' Get list of currently open mapper tables.
+'
+Sub GetOpenMappers(list() As String)
+	Call GetOpenMappersExt(list, FALSE)
+End Sub
+
+
+Sub GetOpenMappersExt(list() As String, ByVal noRasters As Logical)
+	Dim i, size As Integer
+	Dim tmpArr() As String
+	
+	ReDim list(0)
+	
+	Call GetOpenTablesList(tmpArr)
+	
+	size = UBound(tmpArr)
+	
+	For i = 1 To size
+		If TableInfo(tmpArr(i), TAB_INFO_MAPPABLE)
+				And (Not noRasters Or (noRasters And TableInfo(tmpArr(i), TAB_INFO_TYPE) <> TAB_TYPE_IMAGE)) Then
+			Call AddStringToArray(list, tmpArr(i))
+		End If
+	Next
+End Sub
+
+
+'
+' Makes routine operations to implement "Update <table> Set <field>=<value> Where <field>=<value>",
+' which is not supported by MapInfo.
+'
+Sub UpdateWhere(ByVal tableName As String, ByVal whereField As String,
+		ByVal whereValue As String, ByVal setField As String, ByVal setValue As String)
+	Dim cols() As String
+	Dim cmd As String
+	
+	If IsTableOpen(tableName) Then
+		Call GetTableColumnList(tableName, cols)
+		
+		If ArraySearchStringI(cols, whereField) > 0
+				And ArraySearchStringI(cols, setField) > 0 Then
+			' Compose selection command.
+			cmd = "Select * From " + tableName + " Where " + whereField + "="
+			
+			If ColumnInfo(tableName, whereField, COL_INFO_TYPE) = COL_TYPE_CHAR Then
+				cmd = cmd + """" + whereValue + """"
+			Else
+				cmd = cmd + whereValue
+			End If
+			
+			cmd = cmd + " Into tmpUpdateWhereTable Noselect"
+			
+			Run Command cmd
+			
+			If TableInfo(tmpUpdateWhereTable, TAB_INFO_NROWS) > 0 Then
+				' Compose update command.
+				cmd = "Update tmpUpdateWhereTable Set " + setField + "="
+				
+				If ColumnInfo(tableName, setField, COL_INFO_TYPE) = COL_TYPE_CHAR Then
+					cmd = cmd + """" + setValue + """"
+				Else
+					cmd = cmd + setValue
+				End If
+				
+				Run Command cmd
+			End If
+			
+			Close Table tmpUpdateWhereTable
+		End If
+	End If
+End Sub
+
+
+'
+' Get table column list and put it into given array.
+'
+Sub GetTableColumnList(ByVal tableName As String, list() As String)
+	Dim colCount As Integer
+	Dim i As Integer
+	
+	ReDim list(0)
+	
+	If IsTableOpen(tableName) Then
+		' Raster tables have no fields and should be skipped,
+		' in other case an attempt to extract fields will cause an error.
+		If TableInfo(tableName, TAB_INFO_TYPE) <> TAB_TYPE_IMAGE Then
+			colCount = TableInfo(tableName, TAB_INFO_NCOLS)
+			
+			If colCount > 0 Then
+				ReDim list(colCount)
+				
+				For i = 1 To colCount
+					list(i) = ColumnInfo(tableName, "COL" + i, COL_INFO_NAME)
+				Next
+			End If
+		End If
+	End If
+End Sub
+
+
+'
+' Find out if table has entries marked as "removed". Works both for mappers
+' and non-mappers.
+'
+Function IsTablePacked(ByVal tableName As String) As Logical
+	Dim res As Logical
+	
+	If IsTableOpen(tableName) Then
+		If TableInfo(tableName, TAB_INFO_MAPPABLE) Then
+			Select * From tableName Where obj Into tmpPackedCheckTable Noselect
+		Else
+			Select * From tableName Where Not obj Into tmpPackedCheckTable Noselect
+		End If
+		
+		res = (TableInfo(tableName, TAB_INFO_NROWS)
+			= TableInfo("tmpPackedCheckTable", TAB_INFO_NROWS))
+		
+		Close Table tmpPackedCheckTable
+	End If
+	
+	IsTablePacked = res
+End Function
+
+
+'
+' TableInfo(table, TAB_INFO_NROWS) returns size accounting unpacked data,
+' e.g. table has 10 rows, 2 of them marked as deleted. TableInfo(...) returns 10.
+' This function returns 8.
+'
+Function GetUnpackedTableSize(ByVal tableName As String) As Integer
+	Dim res As Integer
+	
+	If IsTableOpen(tableName) Then
+		If TableInfo(tableName, TAB_INFO_MAPPABLE) Then
+			Select * From tableName Where obj Into tmpGetRealTableSizeTable Noselect
+		Else
+			Select * From tableName Where Not obj Into tmpGetRealTableSizeTable Noselect
+		End If
+		
+		res = TableInfo("tmpGetRealTableSizeTable", TAB_INFO_NROWS)
+		
+		Close Table tmpGetRealTableSizeTable
+	End If
+	
+	GetUnpackedTableSize = res
+End Function
+
+
+Function IsLayerCosmetic(ByVal tableName As String) As Logical
+	 IsLayerCosmetic = StartsWith(UCase$(tableName), "COSMETIC")
+End Function
+
+
+Function IsTableLayout(ByVal tableName As String) As Logical
+	IsTableLayout = StartsWith(UCase$(tableName), "LAYOUT")
+End Function
+
+
+
+'
+' Parse available projection info and store it in CsInfo structure.
+'
+Sub GetCoordSysInfo(ByVal tableName As String, cs As CsInfo)
+	Dim csClause, tokenPrj, tokenSep, tokenUnits1, tokenUnits2 As String
+	Dim pos1, pos2 As Integer
+	
+	tokenPrj = "Projection "
+	tokenSep = ", "
+	tokenUnits1 = "Units """
+	tokenUnits2 = """"
+	
+	If IsTableOpen(tableName) Then
+		csClause = TableInfo(tableName, TAB_INFO_COORDSYS_CLAUSE)
+		
+		If InStr(1, LCase$(csClause), "nonearth") > 0 Then
+			cs.isEarth = FALSE
+		Else
+			cs.isEarth = TRUE
+		End If
+		
+		pos1 = InStr(1, csClause, tokenPrj) + Len(tokenPrj)
+		pos2 = InStr(pos1, csClause, tokenSep)
+		
+		cs.prjCode = StrToInt(Mid$(csClause, pos1, pos2 - pos1))
+		
+		pos1 = InStr(1, csClause, tokenSep) + Len(tokenSep)
+		pos2 = InStr(pos1, csClause, tokenSep)
+		
+		cs.datum = StrToInt(Mid$(csClause, pos1, pos2 - pos1))
+		cs.prj = TableInfo(tableName, TAB_INFO_COORDSYS_NAME)
+		
+		pos1 = InStr(1, csClause, tokenUnits1)
+		
+		If pos1 > 0 Then
+			pos1 = pos1 + Len(tokenUnits1)
+			pos2 = InStr(pos1, csClause, tokenUnits2)
+			cs.units = LCase$(Mid$(csClause, pos1, pos2 - pos1))
+		End If
+		
+		cs.minX = TableInfo(tableName, TAB_INFO_COORDSYS_MINX)
+		cs.minY = TableInfo(tableName, TAB_INFO_COORDSYS_MINY)
+		cs.maxX = TableInfo(tableName, TAB_INFO_COORDSYS_MAXX)
+		cs.maxY = TableInfo(tableName, TAB_INFO_COORDSYS_MAXY)
+	End If
+End Sub
+
+
+'
+' Return either "Earth" or "NonEarth" string.
+'
+Function GetCoordSysKind(cs As CsInfo) As String
+	Dim res As String
+	
+	If cs.isEarth Then
+		res = "Earth"
+	Else
+		res = "NonEarth"
+	End If
+	
+	GetCoordSysKind = res
+End Function
+
+
+'
+' Find out whether the given field of table contains only unique values.
+'
+' @11.12.2009: empty values are also make function return false.
+'
+Function CheckFieldValuesUniqueness(ByVal tableName As String,
+		ByVal fieldName As String) As Logical
+	Dim res As Logical
+	
+	If IsTableOpen(tableName) Then
+		Run Command "Select Count(*) From " + tableName
+			+ " Into tmpFieldValueUniquenessCheckTable"
+			+ " Group By " + fieldName
+			+ " Order By Count Desc"
+		
+		Fetch First From tmpFieldValueUniquenessCheckTable
+		
+		res = (tmpFieldValueUniquenessCheckTable.Count = 1)
+		
+		Close Table tmpFieldValueUniquenessCheckTable
+	End If
+	
+	CheckFieldValuesUniqueness = res
+End Function
+
+
+'
+' Create selection backup.
+'
+Sub BackupSelection(ByVal backupTable As String)
+	Dim baseTable As String
+	
+	If SelectionInfo(SEL_INFO_NROWS) > 0 Then
+		baseTable = SelectionInfo(SEL_INFO_TABLENAME)
+		
+		If TableInfo(baseTable, TAB_INFO_MAPPABLE) Then
+			Select * From Selection Into backupTable Noselect
+			
+			Call AddStringToArray(gl_backupTablesPool, backupTable)
+		End If
+	End If
+End Sub
+
+
+'
+' Restore selection from backup table.
+'
+Sub RestoreSelection(ByVal backupTable As String)
+	Dim tableIdx As Integer
+	Dim baseTable As String
+	
+	tableIdx = ArraySearchString(gl_backupTablesPool, backupTable)
+	
+	If tableIdx > 0 Then
+		If IsTableOpen(backupTable) Then
+			Run Command "Select * From " + backupTable
+			
+			baseTable = SelectionInfo(SEL_INFO_TABLENAME)
+			
+			If Not (IsLayerCosmetic(baseTable)
+					Or IsTableLayout(baseTable)) Then
+				Run Command "Close Table " + backupTable
+			End If
+		End If
+		
+		Call DelStringFromArray(gl_backupTablesPool, tableIdx)
+	End If
+End Sub
+
+
+'
+' Delete backup tables created with OpenTable(...) function.
+'
+Sub ClearBackupTables()
+	Dim i, size As Integer
+	
+	size = UBound(gl_backupTablesPool)
+	
+	For i = 1 To size
+		' Can be closed somewhere else.
+		If IsTableOpen(gl_backupTablesPool(i)) Then
+			Run Command "Close Table " + gl_backupTablesPool(i)
+		End If
+	Next
+	
+	ReDim gl_backupTablesPool(0)
+End Sub
+
+
+'
+' Generate next ID for specified table.
+' Assumes that field "idFieldName" is of Integer type.
+'
+Function GenId(ByVal tableName As String, ByVal idFieldName As String)
+		As Integer
+	Dim res As Integer
+	
+	If IsTableOpen(tableName) Then
+		If Len(tableName) = 0 Then
+			GenId = -1
+			
+			Exit Function
+		End If
+		
+		Run Command "Select Max(" + idFieldName + ") From " + tableName
+			+ " Into tmpGenIdTable Noselect"
+		
+		Fetch First From tmpGenIdTable
+		
+		res = tmpGenIdTable.col(1) + 1
+		
+		Close Table tmpGenIdTable
+	End If
+	
+	GenId = res
+End Function
+
+
+'
+' Look for record with specified value in "searchField" field
+' and return value of some other field, specified by "fieldName".
+'
+Function GetFieldValue(ByVal tableName As String, ByVal fieldName As String,
+		ByVal searchField As String, ByVal value As String) As String
+	Dim res As String
+	Dim colType As Integer
+	Dim cmd As String
+	
+	If IsTableOpen(tableName) And Len(fieldName) > 0
+			And Len(searchField) > 0 Then
+		colType = ColumnInfo(tableName, searchField, COL_INFO_TYPE)
+		
+		If colType = COL_TYPE_CHAR Or colType = COL_TYPE_DATE Then
+			cmd = "Select " + fieldName
+				+ " From " + tableName
+				+ " Where " + searchField + "=""" + EncodeForDB(value)
+				+ """ Into tmpGetFieldValueTable Noselect"
+		Else
+			cmd = "Select " + fieldName
+				+ " From " + tableName
+				+ " Where " + searchField + "=" + value
+				+ " Into tmpGetFieldValueTable Noselect"
+		End If
+		
+		Run Command cmd
+		
+		Fetch First From tmpGetFieldValueTable
+		
+		res = DecodeFromDB(tmpGetFieldValueTable.col(1))
+		
+		Close Table tmpGetFieldValueTable
+	End If
+	
+	GetFieldValue = res
+End Function
+
+
+Function IsMapper(ByVal tableName As String) As Logical
+	Dim res As Logical
+	
+	If IsTableOpen(tableName) Then
+		res = TableInfo(tableName, TAB_INFO_MAPPABLE)
+	End If
+	
+	IsMapper = res
+End Function
+
+
+Function GetTableSize(ByVal tableName As String) As Integer
+	GetTableSize = TableInfo(tableName, TAB_INFO_NROWS)
+End Function
+
+
+'
+' Find out if table with given name is open.
+'
+' @22.01.2010:	now "hidden" tables are visible too by applying "unintelligent"
+'               but working method.
+'
+Function IsTableOpen(ByVal tableName As String) As Logical
+	OnError GoTo fail
+	'If EOT(tableName) Then End If
+	'Fetch First From tableName
+	If TableInfo(tableName, TAB_INFO_NROWS) > -1 Then End If
+
+	IsTableOpen = TRUE
+eos:
+	OnError GoTo 0
+
+	Exit Function
+fail:
+	IsTableOpen = FALSE
+
+	Resume eos
+End Function
+
+
+'
+' Drop table specified by its filename.
+'
+' NOTE: table with tableName, obtained with PathToTableName$(...),
+'       might be already open in MapInfo, so don't forget to re-check
+'       actual system table name.
+'
+Sub DropTable(ByVal tableFileName As String)
+	Dim tableName As String
+	Dim openTables() As String
+	Dim i, size As Integer
+	Dim dropped As Logical
+	
+	If FileExistsExt(tableFileName) Then
+		tableName = PathToTableName$(tableFileName)
+		
+		' If that simple -- drop now.
+		If IsTableOpen(tableName) Then
+			If TableInfo(tableName, TAB_INFO_TABFILE) = tableFileName Then
+				Drop Table tableName
+				
+				dropped = TRUE
+			End If
+		Else
+			Call GetOpenTablesList(openTables)
+			
+			size = UBound(openTables)
+			
+			' ... or check amongst open tables, if table was open by alias,
+			' which cannot be extracted from table file name with PathToTableName$(...).
+			For i = 1 To size
+				tableName = openTables(i)
+				
+				If TableInfo(tableName, TAB_INFO_TABFILE) = tableFileName Then
+					Drop Table tableName
+					
+					dropped = TRUE
+					
+					Exit For
+				End If
+			Next
+			
+			' If nothing helped, open it and drop.
+			If Not dropped Then
+				Open Table tableFileName
+				
+				tableName = TableInfo(0, TAB_INFO_NAME)
+				
+				Drop Table tableName
+				
+				dropped = TRUE
+			End If
+		End If
+	End If
+End Sub
+
+
+'
+' Open given table file and return it's system name.
+'
+' Useful if opening tables with same name.
+'
+Function OpenTable(ByVal tableFileName As String) As String
+	Dim res As String
+	
+	If Not FileExistsExt(tableFileName) Then
+		Call LogMsg(LOG_LEVEL_ERROR, "Failed to open table: no such file """
+			+ tableFileName + """")
+	Else
+		OnError GoTo fail
+			Open Table tableFileName
+			
+			res = TableInfo(0, TAB_INFO_NAME)
+			
+			Call HashTableAdd(gl_openTables, tableFileName, res)
+			
+			GoTo okee
+fail:
+		Call LogMsg(LOG_LEVEL_ERROR, "Failed to open table """
+			+ tableFileName + """")
+okee:
+	End If
+	
+	OnError GoTo 0
+
+	OpenTable = res
+End Function
+
+
+'
+' Get table's system name.
+'
+Function GetTableName(ByVal tableFileName As String) As String
+	GetTableName = HashTableGet(gl_openTables, tableFileName)
+End Function
+
+
+'
+' Close table that was opened via OpenTable(...) function and remove
+' its entry from internal open tables list.
+'
+Sub CloseTable(ByVal tableFileName As String)
+	Dim tableName As String
+	Dim res As String
+	
+	tableName = HashTableGetI(gl_openTables, tableFileName)
+	
+	If Len(tableName) > 0 Then
+		If IsTableOpen(tableName) Then
+			Close Table tableName
+			
+			res = HashTableDelete(gl_openTables, tableFileName)
+		End If
+	Else
+		tableName = PathToTableName$(tableFileName)
+		
+		If IsTableOpen(tableName) Then
+			Close Table tableName
+			
+			res = tableName
+		End If
+	End If
+End Sub
+
+
+Sub CloseTables(tables() As String)
+	Dim i, size As Integer
+	
+	size = UBound(tables)
+	
+	For i = 1 To size
+		Call CloseTable(tables(i))
+	Next
+End Sub
+
+
+Function OpenTables(tableFiles() As String) As Logical
+	Dim res As Logical
+	Dim i, size As Integer
+	
+	res = TRUE
+	size = UBound(tableFiles)
+	
+	For i = 1 To size
+		If Len(OpenTable(tableFiles(i))) = 0 Then
+			Call LogMsg(LOG_LEVEL_ERROR, "Unable to open table: """
+				+ tableFiles(i) + """")
+			
+			res = FALSE
+		End If
+	Next
+	
+	OpenTables = res
+End Function
+
+
+'
+' Close all temporary tables whose name starts with "Query" string.
+'
+Sub ClearTempQueries()
+	Dim i, size As Integer
+	Dim tableName As String
+	
+	size = NumTables()
+	
+	For i = size To 1 Step -1
+		tableName = TableInfo(i, TAB_INFO_NAME)
+		
+		If InStr(1, tableName, "Query") = 1 Then
+			Close Table tableName
+		End If
+	Next
+End Sub
+
+
+'
+' Put list filenames of tables of specified type into tablesOut().
+' type parameter is one of TAB_TYPE_????? declared in "mapbasic.def".
+'
+Sub FilterTablesByType(tablesIn() As String, tablesOut() As String,
+		ByVal tabType As SmallInt)
+	Dim i, size As Integer
+	Dim tableName As String
+	Dim shouldClose As Logical
+	
+	If UBound(tablesIn) > 0
+		And (tabType = TAB_TYPE_BASE
+			Or tabType = TAB_TYPE_RESULT
+			Or tabType = TAB_TYPE_IMAGE
+			Or tabType = TAB_TYPE_VIEW
+			Or tabType = TAB_TYPE_LINKED) Then
+		ReDim tablesOut(0)
+		
+		size = UBound(tablesIn)
+		
+		For i = 1 To size
+			tableName = PathToTableName$(tablesIn(i))
+			shouldClose = Not IsTableOpen(PathToTableName$(tablesIn(i)))
+			
+			If shouldClose Then
+				tableName = OpenTable(tablesIn(i))
+			End If
+			
+			If Len(tableName) > 0 Then
+				If TableInfo(tableName, TAB_INFO_TYPE) = tabType Then
+					Call AddStringToArray(tablesOut, tablesIn(i))
+				End If
+			End If
+			
+			If shouldClose Then
+				Call CloseTable(tablesIn(i))
+			End If
+		Next
+	End If
+End Sub
+
+
+'
+' Wrapper for TableInfo, working for table which may be not opened.
+' Takes table file name instead of system table name.
+' Parameter "attr" is one of defines from "mapbasic.def".
+'
+Function GetTableInfo(ByVal tableFileName As String,
+		ByVal attr As Integer) As String
+	Dim res As String
+	Dim tableName As String
+	Dim shouldClose As Logical
+	
+	If Not FileExistsExt(tableFileName) Then
+		Call LogMsg(LOG_LEVEL_ERROR, "Can't get table information: file """
+			+ tableFileName + """ doesn't exist")
+	Else
+		tableName = PathToTableName$(tableFileName)
+		shouldClose = Not IsTableOpen(tableName)
+		
+		If shouldClose Then
+			tableName = OpenTable(tableFileName)
+		End If
+		
+		res = TableInfo(tableName, attr)
+		
+		If shouldClose Then
+			Call CloseTable(tableFileName)
+		End If
+	End If
+	
+	GetTableInfo = res
+End Function
+
+
+'
+' Write a file which links an image to a map.
+' It expects that there are 4 link-points, going in CW order
+' starting from the North-West one.
+'
+' Resulting file has the same name as provided image, except
+' the extension, and is returned as the function completes.
+'
+Function CreateRasterTable(ByVal rasterFileName As String,
+		ByVal csClause As String,
+		ByVal unitName As String,
+		ByVal imgW As Integer,
+		ByVal imgH As Integer,
+		ByVal p1x As Float,
+		ByVal p1y As Float,
+		ByVal p2x As Float,
+		ByVal p2y As Float,
+		ByVal p3x As Float,
+		ByVal p3y As Float,
+		ByVal p4x As Float,
+		ByVal p4y As Float) As String
+	Dim startMsg As String	
+	Dim res As String
+	Dim fileId As Integer
+	
+	If Not (FileExistsExt(rasterFileName) And Len(csClause) > 0
+			And Len(unitName) > 0 And imgW > 0 And imgH > 0) Then
+		startMsg = "Can't create raster table. "
+		
+		If Not FileExistsExt(rasterFileName) Then
+			Call LogMsg(LOG_LEVEL_ERROR, startMsg
+				+ "No such file: """ + rasterFileName + """")
+		ElseIf Len(csClause) = 0 Then
+			Call LogMsg(LOG_LEVEL_ERROR, startMsg
+				+ "Coordinate system clause not given")
+		ElseIf Len(unitName) = 0 Then
+			Call LogMsg(LOG_LEVEL_ERROR, startMsg
+				+ "Measurement unit name not provided")
+		ElseIf imgW = 0 Or imgH = 0 Then
+			Call LogMsg(LOG_LEVEL_ERROR, startMsg
+				+ "Image length and/or height is 0")
+		End If
+	Else
+		res = PathToDir(rasterFileName)
+		res = res + PathToNameNoExt(rasterFileName)
+		res = res + ".tab"
+		
+		fileId = OpenFileExt(res, FMODE_WRITE, "WindowsCyrillic")
+		
+		Print # fileId, "!table"
+		Print # fileId, "!version " + SystemInfo(SYS_INFO_MIVERSION)
+		Print # fileId, "!charset WindowsCyrillic"
+		Print # fileId, ""
+		Print # fileId, "Definition Table"
+		Print # fileId, "  File """ + PathToName(rasterFileName) + """"
+		Print # fileId, "  Type ""RASTER"""
+		Print # fileId, "  (" + StrReplace(",", ".",
+			FloatToStrCustom(p1x, "0.0000000000")) + ","
+			+ StrReplace(",", ".", FloatToStrCustom(p1y, "0.0000000000"))
+			+ ") (0,0) Label ""Point 1"","
+		Print # fileId, "  (" + StrReplace(",", ".",
+			FloatToStrCustom(p2x, "0.0000000000"))
+			+ "," + StrReplace(",", ".", FloatToStrCustom(p2y, "0.0000000000"))
+			+ ") (" + imgW + ",0) Label ""Point 2"","
+		Print # fileId, "  (" + StrReplace(",", ".",
+			FloatToStrCustom(p3x, "0.0000000000"))
+			+ "," + StrReplace(",", ".", FloatToStrCustom(p3y, "0.0000000000"))
+			+ ") (" + imgW + "," + imgH + ") Label ""Point 3"","
+		Print # fileId, "  (" + StrReplace(",", ".",
+			FloatToStrCustom(p4x, "0.0000000000"))
+			+ "," + StrReplace(",", ".", FloatToStrCustom(p4y, "0.0000000000"))
+			+ ") (0," + imgH + ") Label ""Point 4"""
+		Print # fileId, "  " + csClause
+		Print # fileId, "  Units """ + unitName + """"
+		
+		Call CloseFile(fileId)
+	End If
+	
+	CreateRasterTable = res
+End Function
+
+
+'
+' Fill table info structure (see .def file).
+'
+' Expects that required table is open.
+'
+Sub ReadTableInfo(ByVal tableName As String, info As TabInfo)
+	Dim targetStr, foundStr, tableFileName As String
+	Dim str, lines() As String
+	Dim pos1, pos2, i, j, lineCount, keyCount As Integer
+	Dim keyVersion, keyFile, keyType, keyUnits As String
+	Dim keys() As String
+	
+	Call ClearTableInfo(info)
+	
+	If IsTableOpen(tableName) Then
+		keyVersion = "!VERSION"
+		keyFile = "FILE"
+		keyType = "TYPE"
+		keyUnits = "UNITS"
+		
+		tableFileName = TableInfo(tableName, TAB_INFO_TABFILE)
+
+		If FileReadLinesExt(tableFileName, lines, "WindowsCyrillic") > 0 Then
+			Call AddStringToArray(keys, keyVersion)
+			Call AddStringToArray(keys, keyFile)
+			Call AddStringToArray(keys, keyType)
+			Call AddStringToArray(keys, keyUnits)
+			
+			keyCount = UBound(keys)
+			lineCount = UBound(lines)
+			
+			For i = 1 To keyCount
+				targetStr = keys(i)
+				
+				For j = 1 To lineCount
+					str = lines(j)
+					pos1 = InStr(1, UCase$(str), targetStr)
+					
+					If pos1 > 0 Then
+						' if got quoted value
+						If InStr(pos1, str, """") > 0 Then
+							pos1 = pos1 + Len(targetStr) + 2
+							pos2 = InStr(pos1, str, """")
+						Else
+							pos1 = pos1 + Len(targetStr) + 1
+							pos2 = Len(str) + 1
+						End If
+						
+						foundStr = Mid$(str, pos1, pos2 - pos1)
+						
+						If targetStr = keyVersion Then
+							info.version = foundStr
+						ElseIf targetStr = keyFile Then
+							info.file = foundStr
+						ElseIf targetStr = keyType Then
+							info.ttype = foundStr
+						ElseIf targetStr = keyUnits Then
+							info.unit = foundStr
+						End If
+						
+						Exit For
+					End If
+				Next
+			Next
+			
+			' If units not found, set it to meters.
+			If Len(Trim(info.unit)) = 0 Then
+				info.unit = "m"
+			End If
+		End If
+	End If
+End Sub
+
+
+'
+' Define global extrems across all tables available in "tables" array.
+' Tables are expected to be open.
+'
+' NOTE: it's assumed that coordinate systems in all tables have the same units.
+'
+Sub DefineExtrems(tables() As String, minX As Float, minY As Float,
+		maxX As Float, maxY As Float)
+	Dim i, size As Integer
+	Dim tableName As String
+	Dim tmpMinX, tmpMinY, tmpMaxX, tmpMaxY As Float
+	
+	size = UBound(tables)
+	minX = 0
+	minY = 0
+	maxX = 0
+	maxY = 0
+	
+	For i = 1 To size
+		tableName = tables(i)
+		
+		If Len(tableName) > 0 Then
+			Set CoordSys Table tableName
+			
+			Call GetTableBounds(tableName, tmpMinX, tmpMinY, tmpMaxX, tmpMaxY)
+			
+			If i = 1 Then
+				minX = tmpMinX
+				minY = tmpMinY
+				maxX = tmpMaxX
+				maxY = tmpMaxY
+			Else
+				minX = GetMin2(minX, tmpMinX)
+				minY = GetMin2(minY, tmpMinY)
+				maxX = GetMax2(maxX, tmpMaxX)
+				maxY = GetMax2(maxY, tmpMaxY)
+			End If
+		End If
+	Next
+End Sub
+
+
+'
+' Obtain actual table bounds needed to keep all its objects.
+'
+Sub DefineExtremsByObjs(tables() As String, minX As Float, minY As Float,
+		maxX As Float, maxY As Float)
+	Dim i, size As Integer
+	Dim tableName As String
+	Dim tmpMinX, tmpMinY, tmpMaxX, tmpMaxY As Float
+	
+	size = UBound(tables)
+	minX = 0
+	minY = 0
+	maxX = 0
+	maxY = 0
+	
+	For i = 1 To size
+		tableName = tables(i)
+		
+		If Len(tableName) > 0 And ContainsGraphicObjects(tableName) Then
+			Set CoordSys Table tableName
+			
+			Call GetTableBoundsByObjs(tableName, tmpMinX, tmpMinY, tmpMaxX, tmpMaxY)
+			
+			If i = 1 Then
+				minX = tmpMinX
+				minY = tmpMinY
+				maxX = tmpMaxX
+				maxY = tmpMaxY
+			Else
+				minX = GetMin2(minX, tmpMinX)
+				minY = GetMin2(minY, tmpMinY)
+				maxX = GetMax2(maxX, tmpMaxX)
+				maxY = GetMax2(maxY, tmpMaxY)
+			End If
+		End If
+	Next
+End Sub
+
+
+'
+' Get bounds of table from its CS clause.
+'
+Sub GetTableBounds(ByVal tableName As String, minX As Float, minY As Float,
+		maxX As Float, maxY As Float)
+	minX = 0
+	minY = 0
+	maxX = 0
+	maxY = 0
+	
+	If IsTableOpen(tableName) Then
+		Set CoordSys Table tableName
+		
+		minX = TableInfo(tableName, TAB_INFO_COORDSYS_MINX)
+		minY = TableInfo(tableName, TAB_INFO_COORDSYS_MINY)
+		maxX = TableInfo(tableName, TAB_INFO_COORDSYS_MAXX)
+		maxY = TableInfo(tableName, TAB_INFO_COORDSYS_MAXY)
+	End If
+End Sub
+
+
+'
+' Get bounds of table by the minimum covering rectangle (not from coordinates
+' in its CS clause).
+'
+Sub GetTableBoundsByObjs(ByVal tableName As String, minX As Float,
+		minY As Float, maxX As Float, maxY As Float)
+	minX = 0
+	minY = 0
+	maxX = 0
+	maxY = 0
+	
+	If IsTableOpen(tableName) Then
+		If ContainsGraphicObjects(tableName) Then
+			Set CoordSys Table tableName
+			
+			minX = TableInfo(tableName, TAB_INFO_MINX)
+			minY = TableInfo(tableName, TAB_INFO_MINY)
+			maxX = TableInfo(tableName, TAB_INFO_MAXX)
+			maxY = TableInfo(tableName, TAB_INFO_MAXY)
+		End If
+	End If
+End Sub
+
+
+'
+' Check if mappable table contains some graphics. Note that table
+' might even contain some records without assigned graphics.
+'
+Function ContainsGraphicObjects(ByVal tableName As String) As Logical
+	Dim res As Logical
+	
+	If IsTableOpen(tableName) Then
+		res = TableInfo(tableName, TAB_INFO_MAPPABLE)
+		
+		If res Then
+			Select obj From tableName Where obj Into tmpCheckHasGO Noselect
+			
+			res = (TableInfo(tmpCheckHasGO, TAB_INFO_NROWS) > 0)
+			
+			Close Table tmpCheckHasGO
+		End If
+	End If
+	
+	ContainsGraphicObjects = res
+End Function
+
+
+Function ContainsField(ByVal tableName As String, ByVal field As String) As Logical
+	Dim res As Logical
+	Dim cols() As String
+	
+	Call GetTableColumnList(tableName, cols)
+	
+	res = (ArraySearchStringI(cols, field) > 0)
+	
+	ContainsField = res
+End Function
+
+
+'
+' Get coordinate system clause of provided table and reset its bounds,
+' if any.
+'
+' Note that "CoordSys" clause in the beginning of the string is left unchanged.
+'
+Function ModifyCsClause(ByVal tableName As String, ByVal minX As Float,
+		ByVal minY As Float, ByVal maxX As Float, ByVal maxY As Float) As String
+	Dim res As String
+	Dim pos, prec As Integer
+	
+	If IsTableOpen(tableName) Then
+		prec = DEFAULT_EXTREMS_PRECISION
+		res = TableInfo(tableName, TAB_INFO_COORDSYS_CLAUSE)
+		pos = InStr(1, UCase$(res), " BOUNDS")
+		
+		If pos > 0 Then
+			res = Mid$(res, 1, pos - 1)
+			res = res + " Bounds ("
+				+ PrepareFloatExt(minX, prec, FALSE)
+					+ ", " + PrepareFloatExt(minY, prec, FALSE) + ")"
+				+ " (" + PrepareFloatExt(maxX, prec, FALSE)
+					+ ", " + PrepareFloatExt(maxY, prec, FALSE) + ")"
+		End If
+	End If
+	
+	ModifyCsClause = res
+End Function
+
+
+'
+' Ignore errors on table close.
+'
+Sub ForceCloseTable(ByVal tableName As String)
+	OnError GoTo skip
+		Close Table tableName
+skip:
+	OnError GoTo 0
+End Sub
+
+
+Sub GetColumnInfos(ByVal tableName As String, colInfos() As ColInfo)
+	Dim exclList() As String
+	
+	Call GetColumnInfosExt(tableName, colInfos, exclList)
+End Sub
+
+
+Sub GetColumnInfosExt(ByVal tableName As String, colInfos() As ColInfo,
+		exclList() As String)
+	Dim i, size As Integer
+	Dim colName As String
+	Dim colList() As String
+	
+	If IsTableOpen(tableName) Then
+		Call GetTableColumnList(tableName, colList)
+		
+		size = UBound(colList) - UBound(exclList)
+		
+		ReDim colInfos(size)
+		
+		For i = 1 To size
+			colName = colList(i)
+			
+			If ArraySearchStringI(exclList, colName) < 1 Then
+				colInfos(i).name = ColumnInfo(tableName, colName, COL_INFO_NAME)
+				colInfos(i).num = ColumnInfo(tableName, colName, COL_INFO_NUM)
+				colInfos(i).typeId = ColumnInfo(tableName, colName, COL_INFO_TYPE)
+				colInfos(i).length = ColumnInfo(tableName, colName, COL_INFO_WIDTH)
+				colInfos(i).prec = ColumnInfo(tableName, colName, COL_INFO_DECPLACES)
+				colInfos(i).indexed = ColumnInfo(tableName, colName, COL_INFO_INDEXED)
+				colInfos(i).editable = ColumnInfo(tableName, colName, COL_INFO_EDITABLE)
+			End If
+		Next
+	End If
+End Sub
+
+
+Sub CopyColumnInfo(src As ColInfo, dst As ColInfo)
+	dst.name = src.name
+	dst.num = src.num
+	dst.typeId = src.typeId
+	dst.length = src.length
+	dst.prec = src.prec
+	dst.indexed = src.indexed
+	dst.editable = src.editable
+End Sub
+
+
+Sub AddColumnInfoToArray(arr() As ColInfo, v As ColInfo)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	Call CopyColumnInfo(v, arr(size))
+End Sub
+
+
+Function ColumnInfoToString(colInfo As ColInfo) As String
+	Dim colStr As String
+	
+	If colInfo.typeId = COL_TYPE_INTEGER Then
+		colStr = colInfo.name + " Integer"
+	ElseIf colInfo.typeId = COL_TYPE_DECIMAL Then
+		colStr = colInfo.name + " Decimal(" + colInfo.length + ", " + colInfo.prec + ")"
+	ElseIf colInfo.typeId = COL_TYPE_FLOAT Then
+		colStr = colInfo.name + " Float"
+	ElseIf colInfo.typeId = COL_TYPE_SMALLINT Then
+		colStr = colInfo.name + " SmallInt"
+	ElseIf colInfo.typeId = COL_TYPE_LOGICAL Then
+		colStr = colInfo.name + " Logical"
+	ElseIf colInfo.typeId = COL_TYPE_DATE Then
+		colStr = colInfo.name + " Date"
+	ElseIf colInfo.typeId = COL_TYPE_CHAR Then
+		colStr = colInfo.name + " Char(" + colInfo.length + ")"
+	End If
+	
+	ColumnInfoToString = colStr
+End Function
+
+
+Function ColumnInfosToString(colInfos() As ColInfo,
+		ByVal glue As String) As String
+	Dim colStr As String
+	Dim arr() As String
+	Dim i, size As Integer
+	
+	size = UBound(colInfos)
+	
+	For i = 1 To size
+		colStr = ColumnInfoToString(colInfos(i))
+		
+		Call AddStringToArray(arr, colStr)
+	Next
+	
+	ColumnInfosToString = Join(arr, glue)
+End Function
+
+
+'
+' Calculate entire size of all given columns, in bytes.
+'
+Function GetRowSize(colInfos() As ColInfo) As Integer
+	Dim res, i, size As Integer
+	
+	size = UBound(colInfos)
+	
+	For i = 1 To size
+		res = res + GetColumnSize(colInfos(i))
+	Next
+	
+	GetRowSize = res
+End Function
+
+
+'
+' Get size of column by its type, in bytes.
+'
+Function GetColumnSize(colInfo As ColInfo) As Integer
+	Dim res As Integer
+	
+	If colInfo.typeId = COL_TYPE_INTEGER Then
+		res = 4
+	ElseIf colInfo.typeId = COL_TYPE_DECIMAL Then
+		res = colInfo.length
+	ElseIf colInfo.typeId = COL_TYPE_FLOAT Then
+		res = 8
+	ElseIf colInfo.typeId = COL_TYPE_SMALLINT Then
+		res = 2
+	ElseIf colInfo.typeId = COL_TYPE_LOGICAL Then
+		res = 2
+	ElseIf colInfo.typeId = COL_TYPE_DATE Then
+		res = 4
+	ElseIf colInfo.typeId = COL_TYPE_CHAR Then
+		res = colInfo.length
+	End If
+	
+	GetColumnSize = res
+End Function
+
+
+'
+' Get table system name by its full file name.
+'
+Function GetTableNameByFile(ByVal tableFileName As String) As String
+	Dim res, tabFile As String
+	Dim openTables() As String
+	Dim i, size As Integer
+	
+	Call GetOpenTablesList(openTables)
+	
+	tableFileName = UCase$(tableFileName)
+	size = UBound(openTables)
+	
+	For i = 1 To size
+		tabFile = UCase$(TableInfo(openTables(i), TAB_INFO_TABFILE))
+		
+		If tabFile = tableFileName Then
+			res = openTables(i)
+			
+			Exit For
+		End If
+	Next
+	
+	GetTableNameByFile = res
+End Function
+
+
+Function GetTempTableName() As String
+	Dim res As String
+	
+	res = TempFileName$(GetTempDirectory())
+	res = PathToDir(res) + PathToNameNoExt(res) + ".tab"
+	
+	GetTempTableName = res
+End Function
+
+
+'
+' Remove table on which selection is built upon from given table list.
+'
+Sub GetNonSelectedTables(resList() As String)
+	Dim srcList() As String
+	
+	Call GetOpenMappers(srcList)
+	Call FilterTablesBySelection(srcList, resList)
+End Sub
+
+
+Sub GetNonSelectedMappers(resList() As String)
+	Dim srcList() As String
+	
+	Call GetOpenMappers(srcList)
+	Call FilterTablesBySelection(srcList, resList)
+End Sub
+
+
+'
+' Check field for validity.
+'
+Function CheckColName(ByVal n As String) As Logical
+	Dim res As Logical
+	Dim code, i, size As Integer
+	
+	res = TRUE
+	size = Len(n)
+	
+	For i = 1 To size
+		code = Asc(Mid$(n, i, 1))
+		
+		If i = 1 Then
+			If code >= 48 And code <= 57 Then
+				res = FALSE
+				
+				Exit For
+			End If
+		Else
+			If Not (IsAlpha(code)
+					Or IsNumber(code)
+					Or code = 32 ' " "
+					Or code = 95) Then ' "_"
+				res = FALSE
+				
+				Exit For
+			End If
+		End If
+	Next
+	
+	CheckColName = res
+End Function
+
+
+Function ReadLargeField(ByVal rowNum As Integer, ByVal tableName As String,
+		ByVal fieldName As String) As String
+	Dim res As String
+	Dim targetFields() As String
+	Dim i, size As SmallInt
+	
+	If IsTableOpen(tableName) Then
+		Call GetLargeFieldParts(tableName, fieldName, targetFields)
+		
+		If UBound(targetFields) > 0 Then
+			Run Command "Select " + Join(targetFields, ", ")
+				+ " From " + tableName
+				+ " Where RowID=" + rowNum
+				+ " Into tmpLfTable Noselect"
+			
+			size = UBound(targetFields)
+			
+			For i = 1 To size
+				res = res + tmpLfTable.Col(i)
+			Next
+			
+			Close Table tmpLfTable
+		End If
+	End If
+	
+	ReadLargeField = res
+End Function
+
+
+'
+' Write data to large field. If longer than table allows, FALSE returned,
+' data is cut to the limit.
+'
+' If data length doesn't occupy all of the large field parts, clear all
+' the rest.
+'
+' NOTE: prepare data with EncodeForDB(...) by hand before calling this routine.
+'
+Function WriteLargeField(ByVal rowNum As Integer, ByVal tableName As String,
+		ByVal fieldName As String, ByVal data As String) As Logical
+	Dim res As Logical
+	Dim targetFields(), chunks(), sqLines() As String
+	Dim i, size, size1, size2 As SmallInt
+	
+	If IsTableOpen(tableName) Then
+		Call GetLargeFieldParts(tableName, fieldName, targetFields)
+		
+		If UBound(targetFields) > 0 Then
+			size = UBound(targetFields)
+			
+			For i = 1 To size
+				If ColumnInfo(tableName, targetFields(i), COL_INFO_TYPE) <> COL_TYPE_CHAR
+						Or ColumnInfo(tableName, targetFields(i), COL_INFO_WIDTH) < MAX_CHAR_FIELD_LENGTH Then
+					Call LogMsg(LOG_LEVEL_ERROR, "WriteLargeField: field """ + targetFields(i)
+						+ """ in table """ + tableName + """ has incorrect type and/or is too short")
+				Else
+					res = TRUE
+				End If
+			Next
+			
+			If res Then
+				Call SplitByLen(data, MAX_CHAR_FIELD_LENGTH, chunks)
+				
+				size1 = UBound(chunks)
+				size2 = size1
+				res = (size1 <= size)
+				
+				If Not res Then
+					Call LogMsg(LOG_LEVEL_ERROR, "WriteLargeField: table """ + tableName
+						+ """ has not enough fields to store " + size1 + " chunk(s)."
+						+ " Data is cut.")
+					
+					size2 = size
+				End If
+				
+				For i = 1 To size2
+					Call AddStringToArray(sqLines, targetFields(i) + "=""" + chunks(i) + """")
+				Next
+				
+				Run Command "Update " + tableName
+					+ " Set " + Join(sqLines, ", ")
+					+ " Where RowID=" + rowNum
+				
+				' Clear all the rest (if any).
+				If size1 < size Then
+					For i = i To size
+						Run Command "Update " + tableName
+							+ " Set " + targetFields(i) + "="""""
+							+ " Where RowID=" + rowNum
+					Next
+				End If
+			End If
+		End If
+	End If
+	
+	WriteLargeField = res
+End Function
+
+
+Function DuplicateTable(ByVal srcTable As String, ByVal destTable As String,
+		ByVal outFile As String, ByVal dubData As Logical) As Logical
+	Dim colDefs() As ColInfo
+	
+	DuplicateTable = DuplicateTableExt(srcTable, destTable, outFile, colDefs, dubData)
+End Function
+
+
+Function DuplicateTableExt(ByVal srcTable As String, ByVal destTable As String,
+		ByVal outFile As String, colDefs() As ColInfo, ByVal dubData As Logical)
+		As Logical
+	Dim res As Logical
+	Dim cmd, cds As String
+	Dim rSize As Integer
+	
+	destTable = Trim(destTable)
+	
+	If IsTableOpen(srcTable) And Not IsTableOpen(destTable) And Len(destTable) > 0 Then
+		rSize = GetRowSize(colDefs)
+		
+		If rSize > MAX_TABLE_RECORD_LENGTH Then
+			Call LogMsg(LOG_LEVEL_ERROR, "Required record length (" + rSize
+				+ " B) exceeds maximum value of " + MAX_TABLE_RECORD_LENGTH + " B."
+				+ " Table """ + destTable + """ cannot be created.")
+		Else
+			cds = ColDefsToString(colDefs)
+			cmd = "Create Table " + destTable
+			
+			If Len(cds) > 0 Then
+				cmd = cmd + " (" + cds + ")"
+			Else
+				cmd = cmd + " Using " + srcTable
+			End If
+			
+			cmd = cmd + " File """ + outFile + """"
+			
+			Run Command cmd
+			
+			If TableInfo(srcTable, TAB_INFO_MAPPABLE) Then
+				Run Command "Create Map For " + destTable + " Using " + srcTable
+			End If
+			
+			' Structure's of source and destination table might not correspond
+			' if colDefs array contains custom column definitions.
+			If dubData Then
+				Run Command "Insert Into " + destTable + " Select * From " + srcTable
+				Run Command "Commit Table " + destTable
+			End If
+			
+			res = TRUE
+		End If
+	End If
+	
+	DuplicateTableExt = res
+End Function
+
+
+Function MergeTables(tables() As String, ByVal tableOut As String) As Integer
+	Dim res, i, size As Integer
+	
+	size = UBound(tables)
+	
+	If IsMapper(tableOut) And size > 0 Then
+		For i = 1 To size
+			If IsMapper(tableOut) Then
+				OnError GoTo fail
+					Insert Into tableOut Select * From tables(i)
+					
+					GoTo okee
+fail:
+					res = 0
+					
+					Exit For
+okee:
+				res = res + 1
+			End If
+		Next
+	End If
+
+	OnError GoTo 0
+	
+	MergeTables = res
+End Function
+
+
+Function GetFieldIndex(ByVal tableName As String, ByVal fieldName As String) As Integer
+	Dim res As Integer
+	Dim cols() As String
+	
+	res = -1
+	
+	If IsTableOpen(tableName) Then
+		Call GetTableColumnList(tableName, cols)
+		
+		res = ArraySearchStringI(cols, fieldName)
+	End If
+	
+	GetFieldIndex = res
+End Function
+
+
+Function CheckTableName(ByVal tableName As String) As Logical
+	Dim res As Logical
+	Dim i, size As Integer
+	Dim ch As String
+	
+	res = IsAlpha(Mid$(tableName, 1, 1))
+	size = Len(tableName)
+	
+	If res Then
+		For i = 2 To size
+			ch = Mid$(tableName, i, 1)
+			
+			If Not (IsAlpha(ch) Or IsNumber(ch)
+					Or ch = "_" Or ch = " ") Then
+				res = FALSE
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	CheckTableName = res
+End Function
+
+
+'
+' Define max length for each char field and limit its definitions
+' to found value.
+'
+Sub DrainCharFields(ByVal tableName As String, colInfos() As ColInfo)
+	Dim i, size As Integer
+	
+	size = UBound(colInfos)
+	
+	For i = 1 To size
+		colInfos(i).length = 1 ' Character fields can't be shorter than 1.
+		
+		If colInfos(i).typeId = COL_TYPE_CHAR Then
+			Run Command "Select Max(Len(" + colInfos(i).name + "))"
+				+ " From " + tableName
+				+ " Into tmpDrainTable Noselect"
+			
+			If TableInfo(tmpDrainTable, TAB_INFO_NROWS) > 0 Then
+				Fetch First From tmpDrainTable
+				
+				colInfos(i).length = tmpDrainTable.Col(1)
+			End If
+			
+			Call ForceCloseTable("tmpDrainTable")
+		End If
+	Next
+End Sub
+
+
+Function DataRowToString(dr As DataRow, ByVal updateStatement As Logical) As String
+	Dim res As String
+	Dim i, size As Integer
+	
+	size = UBound(dr.cells)
+	
+	For i = 1 To size
+		If dr.cells(i).ci.typeId = COL_TYPE_CHAR Or dr.cells(i).ci.typeId = COL_TYPE_DATE Then
+			If updateStatement Then
+				res = res + dr.cells(i).ci.name + "=""" + EncodeForDB(dr.cells(i).data) + """"
+			Else
+				res = res + """" + EncodeForDB(dr.cells(i).data) + """"
+			End If
+		Else
+			If updateStatement Then
+				res = res + dr.cells(i).ci.name + "=" + dr.cells(i).data
+			Else
+				res = res + dr.cells(i).data
+			End If
+		End If
+		
+		If i < size Then res = res + ", " End If
+	Next
+	
+	DataRowToString = res
+End Function
+
+
+Function SetDataRowCell(dr As DataRow, ByVal colIdx As SmallInt,
+		ByVal data As String) As Logical
+	Dim res As Logical
+	
+	If colIdx > 0 And colIdx <= UBound(dr.cells) Then
+		If dr.cells(colIdx).ci.typeId <> COL_TYPE_CHAR Then
+			If dr.cells(colIdx).ci.typeId = COL_TYPE_LOGICAL Then
+				If Len(data) = 0 Or data = "F" Or data = "0" Then
+					dr.cells(colIdx).data = "0"
+				Else
+					dr.cells(colIdx).data = "1"
+				End If
+			ElseIf dr.cells(colIdx).ci.typeId = COL_TYPE_INTEGER
+					Or dr.cells(colIdx).ci.typeId = COL_TYPE_SMALLINT Then
+				If Len(data) = 0 Then
+					dr.cells(colIdx).data = "0"
+				Else
+					dr.cells(colIdx).data = Str$(StrToInt(data))
+				End If
+			ElseIf dr.cells(colIdx).ci.typeId = COL_TYPE_FLOAT
+					Or dr.cells(colIdx).ci.typeId = COL_TYPE_DECIMAL Then
+				If Len(data) = 0 Then
+					dr.cells(colIdx).data = "0.0"
+				Else
+					dr.cells(colIdx).data = Str$(StrToFloat(data))
+				End If
+			Else
+				dr.cells(colIdx).data = data
+			End If
+		Else
+			dr.cells(colIdx).data = data
+		End If
+		
+		res = TRUE
+	End If
+	
+	SetDataRowCell = res
+End Function
+
+
+Sub CopyDataCell(src As DataCell, dst As DataCell)
+	Call CopyColumnInfo(src.ci, dst.ci)
+	
+	dst.data = src.data
+End Sub
+
+
+Sub AddDataCellToArray(arr() As DataCell, v As DataCell)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	Call CopyDataCell(v, arr(size))
+End Sub
+
+
+Sub CreateDataCell(dc As DataCell, ci As ColInfo, ByVal data As String)
+	Call CopyColumnInfo(ci, dc.ci)
+	
+	dc.data = data
+End Sub
+
+
+Sub CreateDataRow(dr As DataRow, colInfos() As ColInfo)
+	Dim i, size As Integer
+	Dim dc As DataCell
+	
+	size = UBound(colInfos)
+	
+	For i = 1 To size
+		Call CreateDataCell(dc, colInfos(i), "")
+		Call AddDataCellToArray(dr.cells, dc)
+	Next
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub GetLargeFieldParts(ByVal tableName As String, ByVal fieldName As String,
+		cols() As String)
+	Dim testField As String
+	Dim colList() As String
+	Dim i, size As SmallInt
+	
+	If IsTableOpen(tableName) Then
+		Call GetTableColumnList(tableName, colList)
+		
+		If ArraySearchStringI(colList, fieldName) < 1 Then
+			Call LogMsg(LOG_LEVEL_ERROR, "Table """ + tableName
+				+ """ doesn't contain field """ + fieldName + """")
+		Else
+			size = UBound(colList) - 1
+			
+			Call AddStringToArray(cols, fieldName)
+			
+			For i = 1 To size
+				testField = fieldName + i
+				
+				If ArraySearchStringI(colList, testField) > 0 Then
+					Call AddStringToArray(cols, testField)
+				End If
+			Next
+		End If
+	End If
+End Sub
+
+
+Sub FilterTablesBySelection(srcList() As String, resList() As String)
+	Dim idx As Integer
+	
+	If UBound(srcList) > 0 And SelectionInfo(SEL_INFO_NROWS) > 0 Then
+		Call CopyStringArray(srcList, resList)
+		
+		idx = ArraySearchStringI(srcList, SelectionInfo(SEL_INFO_TABLENAME))
+		
+		If idx > 0 Then
+			Call DelStringFromArray(resList, idx)
+		End If
+	End If
+End Sub
+
+
+'
+' Reset values for given TabInfo structure.
+'
+Sub ClearTableInfo(info As TabInfo)
+	info.version = ""
+	info.ttype = ""
+	info.file = ""
+	info.unit = ""
+End Sub
+
+
+Function ColDefsToString(colDefs() As ColInfo) As String
+	Dim res As String
+	Dim cis() As String
+	Dim i, size As Integer
+	
+	size = UBound(colDefs)
+	
+	For i = 1 To size
+		Call AddStringToArray(cis, ColInfoToString(colDefs(i)))
+	Next
+	
+	res = Join(cis, ", ")
+	
+	ColDefsToString = res
+End Function
+
+
+Function ColInfoToString(ci As ColInfo) As String
+	Dim res, t As String
+	Dim usePrec, useLen As Logical
+	
+	res = ci.name + " "
+	
+	If ci.typeId = COL_TYPE_CHAR Then
+		t = "Char"
+		useLen = TRUE
+	ElseIf ci.typeId = COL_TYPE_DECIMAL Then
+		t = "Decimal"
+		usePrec = TRUE
+		useLen = TRUE
+	ElseIf ci.typeId = COL_TYPE_FLOAT Then
+		t = "Float"
+	ElseIf ci.typeId = COL_TYPE_INTEGER Then
+		t = "Integer"
+	ElseIf ci.typeId = COL_TYPE_SMALLINT Then
+		t = "SmallInt"
+	ElseIf ci.typeId = COL_TYPE_DATE Then
+		t = "Date"
+	ElseIf ci.typeId = COL_TYPE_LOGICAL Then
+		t = "Logical"
+	ElseIf ci.typeId = COL_TYPE_GRAPHIC Then
+		t = "Graphic"
+	End If
+	
+	res = res + t
+	
+	If usePrec And useLen Then
+		res = res + "(" + ci.length + ", " + ci.prec + ")"
+	ElseIf useLen Then
+		res = res + "(" + ci.length + ")"
+	End If
+	
+	ColInfoToString = res
+End Function

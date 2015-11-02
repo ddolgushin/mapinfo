@@ -1,0 +1,188 @@
+Include "Globals.def"
+Include "ArrayTests.def"
+
+
+Function TestArrayContainsSubset() As String
+	Dim res As Logical
+	Dim arr1(), arr2() As String
+	
+	Call AddStringToArray(arr1, 0)
+	Call AddStringToArray(arr1, 1)
+	Call AddStringToArray(arr1, 2)
+	Call AddStringToArray(arr1, 3)
+	Call AddStringToArray(arr1, 4)
+	
+	Call AddStringToArray(arr2, 1)
+	Call AddStringToArray(arr2, 2)
+	Call AddStringToArray(arr2, 3)
+	
+	res = ArrayContainsSubset(arr1, arr2)
+	
+	If res Then
+		res = (Not ArrayContainsSubset(arr2, arr1))
+	End If
+	
+	If res Then
+		Call AddStringToArray(arr2, 0)
+		Call AddStringToArray(arr2, 4)
+		
+		res = ArrayContainsSubset(arr1, arr2)
+	End If
+	
+	If res Then
+		ReDim arr2(0)
+		
+		res = ArrayContainsSubset(arr1, arr2)
+	End If
+	
+	If res Then
+		ReDim arr2(0)
+		
+		Call AddStringToArray(arr2, 111)
+		
+		res = (Not ArrayContainsSubset(arr1, arr2))
+	End If
+	
+	If res Then
+		TestArrayContainsSubset = RESULT_PASSED
+	Else
+		TestArrayContainsSubset = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestArraySubtract() As String
+	Dim res As Logical
+	Dim arr1(), arr2(), arrRes() As String
+	
+	Call AddStringToArray(arr1, 0)
+	Call AddStringToArray(arr1, 1)
+	Call AddStringToArray(arr1, 2)
+	Call AddStringToArray(arr1, 3)
+	Call AddStringToArray(arr1, 4)
+	
+	Call AddStringToArray(arr2, 1)
+	Call AddStringToArray(arr2, 2)
+	Call AddStringToArray(arr2, 3)
+	
+	res = (ArraySubtract(arr1, arr2, arrRes) > 0)
+	
+	If res Then
+		res = (UBound(arrRes) = 2 And arrRes(1) = "0" And arrRes(2) = "4")
+	End If
+	
+	If res Then
+		Call AddStringToArray(arr2, 0)
+		Call AddStringToArray(arr2, 4)
+		
+		res = (ArraySubtract(arr1, arr2, arrRes) = 0)
+	End If
+	
+	If res Then
+		TestArraySubtract = RESULT_PASSED
+	Else
+		TestArraySubtract = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestArrayIntersect() As String
+	Dim res As Logical
+	Dim arr1(), arr2(), arrRes() As String
+	
+	Call AddStringToArray(arr1, "a")
+	Call AddStringToArray(arr1, "b")
+	Call AddStringToArray(arr1, "c")
+	Call AddStringToArray(arr1, "d")
+	Call AddStringToArray(arr1, "e")
+	
+	res = (ArrayIntersect(arr1, arr2, arrRes) = 0)
+	
+	Call AddStringToArray(arr2, "b")
+	Call AddStringToArray(arr2, "c")
+	Call AddStringToArray(arr2, "d")
+	
+	If res And ArrayIntersect(arr1, arr2, arrRes) = 3 Then
+		res = ((arrRes(1) = "b") And (arrRes(2) = "c") And (arrRes(3) = "d"))
+	End If
+	
+	If res Then
+		TestArrayIntersect = RESULT_PASSED
+	Else
+		TestArrayIntersect = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestArrayAdd() As String
+	Dim res As Logical
+	Dim arr1(), arr2(), arrRes() As String
+
+	Call AddStringToArray(arr1, "a")
+	Call AddStringToArray(arr1, "a")
+	Call AddStringToArray(arr1, "b")
+	Call AddStringToArray(arr1, "b")
+	Call AddStringToArray(arr1, "c")
+	Call AddStringToArray(arr1, "c")
+	Call AddStringToArray(arr1, "d")
+	Call AddStringToArray(arr1, "d")
+	Call AddStringToArray(arr1, "e")
+	Call AddStringToArray(arr1, "e")
+
+	Call AddStringToArray(arr2, "f")
+	Call AddStringToArray(arr2, "g")
+	Call AddStringToArray(arr2, "h")
+	
+	If ArrayAdd(arr1, arr2, arrRes) = 13 Then
+		res = ((arrRes(1) = "a")
+			And (arrRes(2) = "a")
+			And (arrRes(3) = "b")
+			And (arrRes(4) = "b")
+			And (arrRes(5) = "c")
+			And (arrRes(6) = "c")
+			And (arrRes(7) = "d")
+			And (arrRes(8) = "d")
+			And (arrRes(9) = "e")
+			And (arrRes(10) = "e")
+			And (arrRes(11) = "f")
+			And (arrRes(12) = "g")
+			And (arrRes(13) = "h"))
+	End If
+	
+	If res Then
+		TestArrayAdd = RESULT_PASSED
+	Else
+		TestArrayAdd = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestArrayUnique() As String
+	Dim res As Logical
+	Dim arr1(), arrRes() As String
+
+	Call AddStringToArray(arr1, "a")
+	Call AddStringToArray(arr1, "a")
+	Call AddStringToArray(arr1, "b")
+	Call AddStringToArray(arr1, "b")
+	Call AddStringToArray(arr1, "c")
+	Call AddStringToArray(arr1, "c")
+	Call AddStringToArray(arr1, "d")
+	Call AddStringToArray(arr1, "d")
+	Call AddStringToArray(arr1, "e")
+	Call AddStringToArray(arr1, "e")
+	
+	If ArrayUnique(arr1, arrRes) = 5 Then
+		res = ((arrRes(1) = "a")
+			And (arrRes(2) = "b")
+			And (arrRes(3) = "c")
+			And (arrRes(4) = "d")
+			And (arrRes(5) = "e"))
+	End If
+	
+	If res Then
+		TestArrayUnique = RESULT_PASSED
+	Else
+		TestArrayUnique = RESULT_FAILED
+	End If
+End Function

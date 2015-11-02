@@ -1,0 +1,323 @@
+Include "Globals.def"
+Include "UtilTests.def"
+
+
+Function TestPathTools() As String
+	Dim res As Logical
+	Dim path As String
+	
+	path = "C:\folder1\folder2\folder3\myfile.ext"
+	res = (PathToDir(path) = "C:\folder1\folder2\folder3\")
+		And (PathToName(path) = "myfile.ext")
+		And (PathToNameNoExt(path) = "myfile")
+		And (PathToExt(path) = "ext")
+	
+	If res Then
+		path = "myfile.ext"
+		res = (PathToDir(path) = "")
+			And (PathToName(path) = "myfile.ext")
+			And (PathToNameNoExt(path) = "myfile")
+			And (PathToExt(path) = "ext")
+	End If
+	
+	If res Then
+		path = "C:\folder1\fol der 2\folder3\m y f i l e.ext"
+		res = (PathToDir(path) = "C:\folder1\fol der 2\folder3\")
+			And (PathToName(path) = "m y f i l e.ext")
+			And (PathToNameNoExt(path) = "m y f i l e")
+			And (PathToExt(path) = "ext")
+	End If
+	
+	If res Then
+		path = "C:\folder1\fol der 2\folder3\m y f i l e.properties"
+		res = (PathToDir(path) = "C:\folder1\fol der 2\folder3\")
+			And (PathToName(path) = "m y f i l e.properties")
+			And (PathToNameNoExt(path) = "m y f i l e")
+			And (PathToExt(path) = "properties")
+	End If
+	
+	If res Then
+		path = "test"
+		res = (PathToDir(path) = "")
+			And (PathToName(path) = "test")
+			And (PathToNameNoExt(path) = "test")
+			And (PathToExt(path) = "")
+	End If
+	
+	If res Then
+		TestPathTools = RESULT_PASSED
+	Else
+		TestPathTools = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestList() As String
+	Dim res As Logical
+	Dim list As StringList
+	Dim i, size As Integer
+	
+	size = MAX_ARRAY_LENGTH + 1
+
+	For i = 1 To size
+		Call StringListAdd(list, i)
+	Next
+
+	Call StringListClear(list)
+
+	For i = 1 To size
+		Call StringListAdd(list, i)
+	Next
+
+	res = (StringListGet(list, size) = Str$(size))
+	
+	If res Then
+		TestList = RESULT_PASSED
+	Else
+		TestList = RESULT_FAILED
+	End If
+End Function
+
+
+'
+' Fill all allowed ids, then free some and open again.
+' If obtained ID equals this freed one, test returns positive.
+'
+Function TestGetFileId() As String
+	Dim res As Logical
+	Dim i, fileId As Integer
+	Dim fileName As String
+	Dim targetFileOffset As Integer
+	
+	targetFileOffset = 10
+	
+	' Occupy all available ids and close files directly, thus leaving
+	' them registered in File module.
+	For i = 1 To FILE_ID_POOL_SIZE + 1
+		If i <= FILE_ID_POOL_SIZE Then
+			fileId = OpenTempFile()
+			fileName = GetTempFileName(fileId)
+			
+			Close File # fileId
+			
+			Kill fileName
+		Else
+			Call CloseTempFile(FILE_ID_START_VALUE + targetFileOffset)
+			
+			fileId = OpenTempFile()
+			fileName = GetTempFileName(fileId)
+			
+			Close File # fileId
+			
+			Kill fileName
+		End If
+	Next
+	
+	res = (fileId = FILE_ID_START_VALUE + targetFileOffset)
+	
+	' Close another file and open new one, and check its id.
+	If res Then
+		targetFileOffset = 2 * targetFileOffset
+		
+		Call CloseTempFile(FILE_ID_START_VALUE + targetFileOffset)
+		
+		fileId = OpenTempFile()
+		fileName = GetTempFileName(fileId)
+		
+		Close File # fileId
+		
+		Kill fileName
+		
+		res = (fileId = FILE_ID_START_VALUE + targetFileOffset)
+	End If
+	
+	If res Then
+		TestGetFileId = RESULT_PASSED
+	Else
+		TestGetFileId = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestURL() As String
+	Dim res As Logical
+	Dim urlStr As String
+	Dim protocol, host, tail As String
+	Dim pmap As HashTable
+	
+	urlStr = "http://www.ya.ru/1/2/3?para1=val1&para2=val2&para3=val3"
+	
+	Call URLGetParameters(urlStr, pmap)
+	
+	protocol = URLGetProtocol(urlStr)
+	host = URLGetHost(urlStr)
+	tail = URLGetTail(urlStr)
+	res = (protocol = "http"
+		And host = "www.ya.ru"
+		And tail = "1/2/3?para1=val1&para2=val2&para3=val3"
+		And HashTableGet(pmap, "para1") = "val1"
+		And HashTableGet(pmap, "para2") = "val2"
+		And HashTableGet(pmap, "para3") = "val3")
+	
+	If res Then
+		urlStr = "ftp://ya.ru/"
+		protocol = URLGetProtocol(urlStr)
+		host = URLGetHost(urlStr)
+		tail = URLGetTail(urlStr)
+		res = (protocol = "ftp"
+			And host = "ya.ru"
+			And tail = "")
+	End If
+	
+	If res Then
+		urlStr = "ya.ru/test?p1=v1&p2"
+		
+		Call URLGetParameters(urlStr, pmap)
+		
+		protocol = URLGetProtocol(urlStr)
+		host = URLGetHost(urlStr)
+		tail = URLGetTail(urlStr)
+		res = (protocol = ""
+			And host = "ya.ru"
+			And tail = "test?p1=v1&p2"
+			And HashTableGet(pmap, "p1") = "v1"
+			And HashTableGet(pmap, "p2") = "")
+	End If
+	
+	If res Then
+		TestURL = RESULT_PASSED
+	Else
+		TestURL = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestStartsEndsWith() As String
+	Dim res As Logical
+	
+	res = StartsWith("aaabbbccc", "aaa")
+	
+	If res Then
+		res = Not StartsWith("aaabbbccc", "ddd")
+	End If
+	
+	If res Then
+		res = Not StartsWith("aaa", "aaabbbccc")
+	End If
+	
+	If res Then
+		res = Not StartsWith("551", "5551")
+	End If
+	
+	If res Then
+		res = EndsWith("aaabbbccc", "ccc")
+	End If
+	
+	If res Then
+		res = Not EndsWith("aaabbbccc", "ddd")
+	End If
+	
+	If res Then
+		res = Not EndsWith("ccc", "cccbbbaaa")
+	End If
+	
+	If res Then
+		res = Not EndsWith("551", "11")
+	End If
+	
+	If res Then
+		res = StartsWith("551", "551")
+	End If
+	
+	If res Then
+		res = EndsWith("551", "551")
+	End If
+	
+	If res Then
+		TestStartsEndsWith = RESULT_PASSED
+	Else
+		TestStartsEndsWith = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestDateTimeParser() As String
+	Dim res As Logical
+	Dim dt As DateTime
+	
+	If ParseDate("2010-12-10", dt) Then
+		res = (dt.y = 2010 And dt.m = 12 And dt.d = 10)
+	End If
+	
+	If res And ParseDate("23-11-10", dt) Then
+		res = (dt.y = 2010 And dt.m = 11 And dt.d = 23)
+	Else
+		res = FALSE
+	End If
+	
+	If res Then
+		res = (Not ParseDate("33-11-33", dt))
+	End If
+	
+	If res Then
+		res = (Not ParseDate("33-11-33", dt))
+	End If
+	
+	If res Then
+		res = (Not ParseDate("03-13-2010", dt))
+	End If
+	
+	' Now use additional part with time.
+	
+	If res And ParseDate("32-1-1 1:1:59", dt) Then
+		res = (dt.y = 1932 And dt.m = 1 And dt.d = 1
+			And dt.hr = 1 And dt.min = 1 And dt.sec = 59)
+	Else
+		res = FALSE
+	End If
+	
+	If res Then
+		res = (Not ParseDate("32-1-1 0:1:61", dt))
+	End If
+	
+	If res Then
+		TestDateTimeParser = RESULT_PASSED
+	Else
+		TestDateTimeParser = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestFileSizeToBytes() As String
+	Dim res As Logical
+	
+	res = g_debug
+	
+	If g_debug Then
+		Print FileSizeToBytes("15B")
+	Else
+		res = (FileSizeToBytes("15B") = 15)
+	End If
+	
+	If res Then
+		If g_debug Then
+			Print FileSizeToBytes("15K")
+		Else
+			res = (FileSizeToBytes("15K") = 15360)
+		End If
+	End If
+	
+	If res Then
+		If g_debug Then
+			Print FileSizeToBytes("15M")
+		Else
+			res = (FileSizeToBytes("15M") = 15728640)
+		End If
+	End If
+	
+	If res Then
+		TestFileSizeToBytes = RESULT_PASSED
+	Else
+		TestFileSizeToBytes = RESULT_FAILED
+	End If
+End Function

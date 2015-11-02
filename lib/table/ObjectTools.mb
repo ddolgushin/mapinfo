@@ -1,0 +1,321 @@
+Include "mapbasic.def"
+Include "ObjectTools.def"
+Include "TableTools.def"
+Include "GeoTools.def"
+
+
+'
+' Check if object is one of standard primitives, not a collection
+' nor a frame.
+'
+Function IsObjectSingle(o As Object) As Logical
+	Dim res As Logical
+	Dim objType As Integer
+	
+	If Not IsObjectNull(o) Then
+		objType = ObjectInfo(o, OBJ_INFO_TYPE)
+		res = Not (objType = OBJ_TYPE_COLLECTION
+			Or objType = OBJ_TYPE_MPOINT
+			Or objType = OBJ_TYPE_FRAME)
+	End If
+	
+	IsObjectSingle = res
+End Function
+
+
+'
+' Check if object is multicontour, i.e. result of ExtractRegionNodes(...)
+' contains more than one object.
+'
+Function IsObjectMulticontour(o As Object) As Logical
+	Dim res As Logical
+	Dim tmpTableFile As String
+	Dim objs() As Obj
+	
+	If Not IsObjectNull(o) Then
+		tmpTableFile = GetTempTableName()
+		
+		Create Table tmpTable (f Char(1)) File tmpTableFile
+		Create Map For tmpTable
+		Insert Into tmpTable (obj) Values (o)
+		Select * From tmpTable
+		
+		Call ExtractRegionNodes(objs, ORDER_NW, FALSE, FALSE, FALSE)
+		
+		res = (UBound(objs) > 1)
+		
+		Drop Table tmpTable
+	End If
+	
+	IsObjectMulticontour = res
+End Function
+
+
+'
+' Check if passed object is null.
+'
+Function IsObjectNull(o As Object) As Logical
+	Dim res As Logical
+	Dim oType As Integer
+	
+	OnError GoTo fail
+		oType = ObjectInfo(o, OBJ_INFO_TYPE)
+		res = FALSE
+		
+		GoTo ok
+	
+fail:
+	res = TRUE
+	
+ok:
+	IsObjectNull = res
+
+    OnError GoTo 0
+End Function
+
+
+'
+' Check if passed object contains nothing inside itself.
+'
+Function IsObjectEmpty(o As Object) As Logical
+	Dim res As Logical
+	Dim oType As Integer
+	
+	If Not IsObjectNull(o) Then
+		OnError GoTo fail
+			oType = ObjectInfo(o, OBJ_INFO_TYPE)
+			
+			If oType = OBJ_TYPE_REGION Or oType = OBJ_TYPE_PLINE
+					Or oType = OBJ_TYPE_MPOINT Or oType = OBJ_TYPE_COLLECTION Then
+				If oType = OBJ_TYPE_COLLECTION Then
+					res = (Not ObjectInfo(o, OBJ_INFO_NONEMPTY))
+				Else
+					res = (ObjectInfo(o, OBJ_INFO_NPNTS) = 0)
+				End If
+			Else res = FALSE End If
+			
+			GoTo ok
+fail:
+	res = TRUE
+	
+ok:
+	End If
+	
+	OnError GoTo 0
+
+	IsObjectEmpty = res
+End Function
+
+
+'
+' Chek if objects are identical.
+'
+Function CompareObjects(o1 As Object, o2 As Object) As SmallInt
+	Dim res As Logical
+	Dim oType1, oType2, pointCount1, pointCount2, i, j,
+		polyCount1, polyCount2 As Integer
+	Dim nodesEqual As Logical
+	
+	res = FALSE
+	
+	If Not (IsObjectNull(o1) Or IsObjectNull(o2)) Then
+		nodesEqual = TRUE
+		oType1 = ObjectInfo(o1, OBJ_INFO_TYPE)
+		oType2 = ObjectInfo(o2, OBJ_INFO_TYPE)
+		
+		If oType1 = oType2 Then
+			If oType1 = OBJ_TYPE_POINT Then
+				res = ((ObjectGeography(o1, OBJ_GEO_POINTX) = ObjectGeography(o2, OBJ_GEO_POINTX))
+					And (ObjectGeography(o1, OBJ_GEO_POINTY) = ObjectGeography(o2, OBJ_GEO_POINTY)))
+			Else
+				If (ObjectGeography(o1, OBJ_GEO_MINX) = ObjectGeography(o2, OBJ_GEO_MINX))
+						And (ObjectGeography(o1, OBJ_GEO_MINY) = ObjectGeography(o2, OBJ_GEO_MINY))
+						And (ObjectGeography(o1, OBJ_GEO_MAXX) = ObjectGeography(o2, OBJ_GEO_MAXX))
+						And (ObjectGeography(o1, OBJ_GEO_MAXY) = ObjectGeography(o2, OBJ_GEO_MAXY)) Then
+					If oType1 = OBJ_TYPE_LINE Then
+						res = ((ObjectGeography(o1, OBJ_GEO_LINEBEGX) = ObjectGeography(o2, OBJ_GEO_LINEBEGX))
+							And (ObjectGeography(o1, OBJ_GEO_LINEBEGY) = ObjectGeography(o2, OBJ_GEO_LINEBEGY))
+							And (ObjectGeography(o1, OBJ_GEO_LINEENDX) = ObjectGeography(o2, OBJ_GEO_LINEENDX))
+							And (ObjectGeography(o1, OBJ_GEO_LINEENDY) = ObjectGeography(o2, OBJ_GEO_LINEENDY)))
+					ElseIf oType1 = OBJ_TYPE_ARC Then
+						res = ((ObjectGeography(o1, OBJ_GEO_ARCBEGANGLE) = ObjectGeography(o2, OBJ_GEO_ARCBEGANGLE))
+							And (ObjectGeography(o1, OBJ_GEO_ARCENDANGLE) = ObjectGeography(o2, OBJ_GEO_ARCENDANGLE)))
+					ElseIf oType1 = OBJ_TYPE_ELLIPSE Then
+						res = TRUE ' Check by coordinates already passed.
+					ElseIf oType1 = OBJ_TYPE_TEXT Then
+						res = ((ObjectInfo(o1, OBJ_INFO_TEXTSTRING) = ObjectInfo(o2, OBJ_INFO_TEXTSTRING))
+							And (ObjectInfo(o1, OBJ_INFO_TEXTSPACING) = ObjectInfo(o2, OBJ_INFO_TEXTSPACING))
+							And (ObjectInfo(o1, OBJ_INFO_TEXTJUSTIFY) = ObjectInfo(o2, OBJ_INFO_TEXTJUSTIFY))
+							And (ObjectGeography(o1, OBJ_GEO_TEXTANGLE) = ObjectGeography(o2, OBJ_GEO_TEXTANGLE))
+							And (ObjectGeography(o1, OBJ_GEO_TEXTLINEX) = ObjectGeography(o2, OBJ_GEO_TEXTLINEX))
+							And (ObjectGeography(o1, OBJ_GEO_TEXTLINEY) = ObjectGeography(o2, OBJ_GEO_TEXTLINEY)))
+					Else ' OBJ_TYPE_PLINE, OBJ_TYPE_REGION, OBJ_TYPE_RECT
+						res = ((Area(o1, "sq m") = Area(o2, "sq m"))
+							And (CentroidX(o1) = CentroidX(o2))
+							And (CentroidY(o1) = CentroidY(o2)))
+						
+						' The rest object types: OBJ_TYPE_PLINE, OBJ_TYPE_REGION, OBJ_TYPE_ROUNDRECT
+						If res Then
+							If oType1 = OBJ_TYPE_ROUNDRECT Then
+								res = ((ObjectGeography(o1, OBJ_GEO_ROUNDRADIUS) = ObjectGeography(o2, OBJ_GEO_ROUNDRADIUS)))
+							ElseIf (oType1 = OBJ_TYPE_PLINE) Or (oType1 = OBJ_TYPE_REGION) Then
+								polyCount1 = ObjectInfo(o1, OBJ_INFO_NPOLYGONS)
+								polyCount2 = ObjectInfo(o2, OBJ_INFO_NPOLYGONS)
+								
+								If polyCount1 = polyCount2 Then
+									For i = 1 To polyCount1
+										pointCount1 = ObjectInfo(o1, OBJ_INFO_NPNTS + i)
+										pointCount2 = ObjectInfo(o2, OBJ_INFO_NPNTS + i)
+										
+										If pointCount1 <> pointCount2 Or Not nodesEqual Then
+											Exit For
+										Else
+											'For j = 1 To pointCount1
+											'	nodesEqual = (ObjectNodeX(o1, i, j) = ObjectNodeX(o2, i, j)
+											'		And ObjectNodeY(o1, i, j) = ObjectNodeY(o2, i, j))
+											'	
+											'	If Not nodesEqual Then
+											'		Exit For
+											'	End If
+											'Next
+											
+											If Not (ObjectGeography(o1, OBJ_GEO_MINX) = ObjectGeography(o2, OBJ_GEO_MINX)
+													And ObjectGeography(o1, OBJ_GEO_MINY) = ObjectGeography(o2, OBJ_GEO_MINY)) Then
+												nodesEqual = FALSE
+											End If
+										End If
+									Next
+									
+									res = nodesEqual
+								End If
+							End If
+						End If
+					End If
+				End If
+			End If
+		End If
+	End If
+	
+	CompareObjects = res
+End Function
+
+
+'
+' Compare object styles.
+'
+Function CompareStyles(o1 As Object, o2 As Object, ByVal windowId As Integer)
+		As Logical
+	Dim res As Logical
+	Dim objType1, objType2 As Integer
+	Dim brush1, brush2 As Brush
+	Dim pen1, pen2 As Pen
+	Dim sym1, sym2 As Symbol
+	Dim font1, font2 As Font
+	Dim fontSize1, fontSize2 As Float
+	
+	If IsObjectSingle(o1) And IsObjectSingle(o2) Then
+		objType1 = ObjectInfo(o1, OBJ_INFO_TYPE)
+		objType2 = ObjectInfo(o2, OBJ_INFO_TYPE)
+		
+		If objType1 = objType2 Then
+			If objType1 = OBJ_TYPE_ELLIPSE Or objType1 = OBJ_TYPE_REGION
+					Or objType1 = OBJ_TYPE_RECT Or objType1 = OBJ_TYPE_ROUNDRECT Then
+				brush1 = ObjectInfo(o1, OBJ_INFO_BRUSH)
+				brush2 = ObjectInfo(o2, OBJ_INFO_BRUSH)
+				
+				pen1 = ObjectInfo(o1, OBJ_INFO_PEN)
+				pen2 = ObjectInfo(o2, OBJ_INFO_PEN)
+				
+				If StyleAttr(brush1, BRUSH_PATTERN) = StyleAttr(brush2, BRUSH_PATTERN)
+					And StyleAttr(brush1, BRUSH_FORECOLOR) = StyleAttr(brush2, BRUSH_FORECOLOR)
+					And StyleAttr(brush1, BRUSH_BACKCOLOR) = StyleAttr(brush2, BRUSH_BACKCOLOR) Then
+					
+					If StyleAttr(pen1, PEN_WIDTH) = StyleAttr(pen2, PEN_WIDTH)
+						And StyleAttr(pen1, PEN_PATTERN) = StyleAttr(pen2, PEN_PATTERN)
+						And StyleAttr(pen1, PEN_COLOR) = StyleAttr(pen2, PEN_COLOR)
+						And StyleAttr(pen1, PEN_INDEX) = StyleAttr(pen2, PEN_INDEX) Then
+						
+						res = 1
+					End If
+				End If
+			ElseIf objType1 = OBJ_TYPE_ARC Or objType1 = OBJ_TYPE_LINE
+					Or objType1 = OBJ_TYPE_PLINE Then
+				pen1 = ObjectInfo(o1, OBJ_INFO_PEN)
+				pen2 = ObjectInfo(o2, OBJ_INFO_PEN)
+				
+				If StyleAttr(pen1, PEN_WIDTH) = StyleAttr(pen2, PEN_WIDTH)
+					And StyleAttr(pen1, PEN_PATTERN) = StyleAttr(pen2, PEN_PATTERN)
+					And StyleAttr(pen1, PEN_COLOR) = StyleAttr(pen2, PEN_COLOR)
+					And StyleAttr(pen1, PEN_INDEX) = StyleAttr(pen2, PEN_INDEX) Then
+					
+					res = 1
+				End If
+			ElseIf objType1 = OBJ_TYPE_POINT Then
+				sym1 = ObjectInfo(o1, OBJ_INFO_SYMBOL)
+				sym2 = ObjectInfo(o2, OBJ_INFO_SYMBOL)
+				
+				If StyleAttr(sym1, SYMBOL_KIND) = StyleAttr(sym2, SYMBOL_KIND)
+					And StyleAttr(sym1, SYMBOL_CODE) = StyleAttr(sym2, SYMBOL_CODE)
+					And StyleAttr(sym1, SYMBOL_COLOR) = StyleAttr(sym2, SYMBOL_COLOR)
+					And StyleAttr(sym1, SYMBOL_POINTSIZE) = StyleAttr(sym2, SYMBOL_POINTSIZE)
+					And StyleAttr(sym1, SYMBOL_FONT_NAME) = StyleAttr(sym2, SYMBOL_FONT_NAME)
+					And StyleAttr(sym1, SYMBOL_FONT_STYLE) = StyleAttr(sym2, SYMBOL_FONT_STYLE)
+					And StyleAttr(sym1, SYMBOL_ANGLE) = StyleAttr(sym2, SYMBOL_ANGLE) Then
+					
+					res = 1
+				End If
+			ElseIf objType1 = OBJ_TYPE_TEXT Then
+				font1 = ObjectInfo(o1, OBJ_INFO_TEXTFONT)
+				font2 = ObjectInfo(o2, OBJ_INFO_TEXTFONT)
+				
+				If StyleAttr(font1, FONT_NAME) = StyleAttr(font2, FONT_NAME)
+					And StyleAttr(font1, FONT_STYLE) = StyleAttr(font2, FONT_STYLE)
+					And StyleAttr(font1, FONT_FORECOLOR) = StyleAttr(font2, FONT_FORECOLOR)
+					And StyleAttr(font1, FONT_BACKCOLOR) And StyleAttr(font2, FONT_BACKCOLOR) Then
+					
+					fontSize1 = TextSize(windowId, o1)
+					fontSize2 = TextSize(windowId, o2)
+					
+					res = (fontSize1 = fontSize2)
+				End If
+			End If
+		End If
+	End If
+	
+	CompareStyles = res
+End Function
+
+
+Function GetObjectTypeName(ByVal code As Integer) As String
+	Dim res As String
+	
+	If code = OBJ_TYPE_ARC Then
+		res = "Дуга"
+	ElseIf code = OBJ_TYPE_ELLIPSE Then
+		res = "Эллипс или окружность"
+	ElseIf code = OBJ_TYPE_LINE Then
+		res = "Прямая линия"
+	ElseIf code = OBJ_TYPE_PLINE Then
+		res = "Полилиния"
+	ElseIf code = OBJ_TYPE_POINT Then
+		res = "Точечный объект"
+	ElseIf code = OBJ_TYPE_FRAME Then
+		res = "Рамка в окне Отчета"
+	ElseIf code = OBJ_TYPE_REGION Then
+		res = "Область"
+	ElseIf code = OBJ_TYPE_RECT Then
+		res = "Прямоугольник"
+	ElseIf code = OBJ_TYPE_ROUNDRECT Then
+		res = "Скругленный прямоугольник"
+	ElseIf code = OBJ_TYPE_TEXT Then
+		res = "Текстовый объект"
+	ElseIf code = OBJ_TYPE_MPOINT Then
+		res = "Набор точек"
+	ElseIf code = OBJ_TYPE_COLLECTION Then
+		res = "Коллекция"
+	Else
+		res = "Неизвестный тип объекта: " + code
+	End If
+	
+	GetObjectTypeName = res
+End Function

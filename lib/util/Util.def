@@ -1,0 +1,53 @@
+Define FLOAT_FORMAT					"0.##"
+Define DEFAULT_FLOAT_PREC   2
+Define MAX_STR_LEN					32767
+
+
+Declare Sub Split(ByVal src As String, ByVal delimiter As String, chunks() As String)
+Declare Sub SplitExt(ByVal src As String, ByVal delimiter As String, chunks() As String, ByVal trimChunks As Logical)
+Declare Sub PrintArray(arr() As String)
+Declare Sub PrintArrayExt(arr() As String, ByVal prefix As String, ByVal suffix As String)
+Declare Sub SwapS(s1 As String, s2 As String)
+Declare Sub SplitByLen(ByVal src As String, ByVal chunkLen As Integer, chunks() As String)
+
+Declare Function StartsWith(ByVal s As String, ByVal what As String) As Logical
+Declare Function EndsWith(ByVal s As String, ByVal what As String) As Logical
+
+Declare Function StrReplace(ByVal pattern As String, ByVal toWhat As String, ByVal source As String) As String
+Declare Function GetWords(ByVal srcStr As String, ByVal wordCount As Integer) As String
+Declare Function CountWords(ByVal srcStr As String, ByVal word As String, ByVal delimBySpace As Logical) As Integer
+Declare Function StrContains(ByVal s As String, ByVal subj As String) As Logical
+Declare Function GetRoundFormat(ByVal prec As SmallInt) As Float
+Declare Function Join(chunks() As String, ByVal glue As String) As String
+Declare Function JoinExt(chunks() As String, ByVal glue As String, ByVal skipEmpty As Logical) As String
+Declare Function ReplaceAnchors(ByVal src As String, ByVal anchorPrefix As String, repls() As String) As String
+Declare Function WrapString(ByVal src As String, ByVal lineLen As Integer, ByVal trimLines As Logical) As String
+Declare Function Trim(ByVal v As String) As String
+Declare Function FloatToStr(ByVal v As Float) As String
+Declare Function FloatToStrCustom(ByVal v As Float, ByVal fmt As String) As String
+Declare Function StrToFloat(ByVal v As String) As Float
+Declare Function StrToInt(ByVal v As String) As Integer
+Declare Function StrToLogical(ByVal v As String) As Logical
+Declare Function LogicalToInt(ByVal v As Logical) As SmallInt
+Declare Function PrepareFloat(ByVal v As Float) As String
+Declare Function PrepareFloatExt(ByVal v As Float, ByVal decimalLength As Integer, ByVal separateWithComma As Logical) As String
+
+Declare Function FileSizeToBytes(ByVal sizeStr As String) As Integer
+
+Declare Function ParseFloat(ByVal v As String, out As Float) As Logical
+Declare Function ParseInt(ByVal v As String, out As Integer) As Logical
+
+Declare Function GetNonEmptyStr(ByVal s1 As String, ByVal s2 As String) As String
+Declare Function GetNonZeroInt(ByVal v1 As Integer, ByVal v2 As Integer) As Integer
+Declare Function GetNonZeroFloat(ByVal v1 As Float, ByVal v2 As Float) As Float
+
+Declare Sub JoinArrays(arr1() As String, arr2() As String, ByVal glue As String, arrRes() As String)
+
+Declare Function IsNumber(ByVal v As String) As Logical
+Declare Function IsAlpha(ByVal v As String) As Logical
+
+Declare Function Cut(ByVal str As String, ByVal trimLeft As Integer, ByVal trimRight As Integer) As String
+
+' Debug functions for measuring time consuming operations.
+Declare Sub TimerReset()
+Declare Function TimerGetDiff() As Integer

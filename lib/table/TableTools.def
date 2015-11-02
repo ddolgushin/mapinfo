@@ -1,0 +1,180 @@
+' Maximum size (in bytes) a single row can handle, i.e. a sum
+' of lenghts of all fields shouldn't be greater than this value.
+Define MAX_TABLE_RECORD_LENGTH		4000
+Define MAX_CHAR_FIELD_LENGTH			254
+' Precision used when altering coordinate system clause (ModifyCsClause(...)).
+Define DEFAULT_EXTREMS_PRECISION	5
+
+
+Type TabInfo
+	version As String
+	ttype As String
+	file As String
+	unit As String
+End Type
+
+Type ColInfo
+	name As String
+	num As Integer
+	typeId As Integer ' MapInfo constant.
+	length As Integer
+	prec As SmallInt
+	indexed As Logical
+	editable As Logical
+End Type
+
+Type DataCell
+	ci As ColInfo
+	data As String
+End Type
+
+Type DataRow
+	cells() As DataCell
+End Type
+
+Type CsInfo
+	isEarth As Logical
+	datum As Integer
+	prj As String
+	prjCode As Integer
+	units As String
+	minX As Float
+	minY As Float
+	maxX As Float
+	maxY As Float
+End Type
+
+
+Declare Sub GetOpenTablesList(list() As String)
+Declare Sub GetOpenTablesListExt(list() As String, ByVal addBlank As Logical)
+Declare Sub GetNonSelectedTables(resList() As String)
+Declare Sub GetOpenMappers(list() As String)
+Declare Sub GetOpenMappersExt(list() As String, ByVal noRasters As Logical)
+Declare Sub GetNonSelectedMappers(resList() As String)
+Declare Sub GetTableColumnList(ByVal tableName As String, list() As String)
+Declare Sub DropTable(ByVal tableFileName As String)
+Declare Sub FilterTablesByType(tablesIn() As String, tablesOut() As String, ByVal tabType As SmallInt)
+Declare Sub ReadTableInfo(ByVal tableName As String, info As TabInfo)
+Declare Sub ClearTempQueries()
+
+Declare Sub GetCoordSysInfo(ByVal tableName As String, cs As CsInfo)
+Declare Function GetCoordSysKind(cs As CsInfo) As String
+
+Declare Function GenId(ByVal tableName As String, ByVal idFieldName As String) As Integer
+Declare Function IsTableOpen(ByVal tableName As String) As Logical
+Declare Function CheckFieldValuesUniqueness(ByVal tableName As String, ByVal fieldName As String) As Logical
+Declare Function GetFieldValue(ByVal tableName As String, ByVal fieldName As String, ByVal searchField As String, ByVal value As String) As String
+Declare Function GetTableInfo(ByVal tableFileName As String, ByVal attr As Integer) As String
+Declare Function GetTableNameByFile(ByVal tableFileName As String) As String
+Declare Function GetTempTableName() As String
+
+Declare Sub UpdateWhere(ByVal tableName As String, ByVal whereField As String, ByVal whereValue As String, ByVal setField As String, ByVal setValue As String)
+
+Declare Function CreateRasterTable(ByVal rasterFileName As String,
+	ByVal csClause As String, ByVal unitName As String,
+	ByVal imgW As Integer, ByVal imgH As Integer,
+	ByVal p1x As Float, ByVal p1y As Float,
+	ByVal p2x As Float, ByVal p2y As Float,
+	ByVal p3x As Float, ByVal p3y As Float,
+	ByVal p4x As Float, ByVal p4y As Float) As String
+
+Declare Sub DefineExtrems(tables() As String, minX As Float, minY As Float, maxX As Float, maxY As Float)
+Declare Sub DefineExtremsByObjs(tables() As String, minX As Float, minY As Float, maxX As Float, maxY As Float)
+Declare Sub GetTableBounds(ByVal tableName As String, minX As Float, minY As Float, maxX As Float, maxY As Float)
+Declare Sub GetTableBoundsByObjs(ByVal tableName As String, minX As Float, minY As Float, maxX As Float, maxY As Float)
+
+Declare Function ModifyCsClause(ByVal tableName As String, ByVal minX As Float, ByVal minY As Float, ByVal maxX As Float, ByVal maxY As Float) As String
+
+Declare Sub ForceCloseTable(ByVal tableName As String)
+
+Declare Function IsTablePacked(ByVal tableName As String) As Logical
+
+Declare Function CheckColName(ByVal n As String) As Logical
+Declare Function CheckTableName(ByVal tableName As String) As Logical
+Declare Function IsMapper(ByVal tableName As String) As Logical
+
+Declare Function GetTableSize(ByVal tableName As String) As Integer
+Declare Function GetUnpackedTableSize(ByVal tableName As String) As Integer
+
+Declare Function IsLayerCosmetic(ByVal tableName As String) As Logical
+Declare Function IsTableLayout(ByVal tableName As String) As Logical
+
+Declare Function ContainsGraphicObjects(ByVal tableName As String) As Logical
+Declare Function ContainsField(ByVal tableName As String, ByVal field As String) As Logical
+
+Declare Function PackSVS(ByVal src As String, ByVal delim As String) As String
+Declare Function UnpackSVS(ByVal src As String, ByVal delim As String) As String
+
+Declare Function MergeTables(tables() As String, ByVal tableOut As String) As Integer
+
+Declare Function GetFieldIndex(ByVal tableName As String, ByVal fieldName As String) As Integer
+
+Declare Sub DrainCharFields(ByVal tableName As String, colInfos() As ColInfo)
+
+
+'
+' Routines to backup selection and restore it after some operation(s) that may
+' drop it.
+'
+Declare Sub BackupSelection(ByVal backupTable As String)
+Declare Sub RestoreSelection(ByVal backupTable As String)
+Declare Sub ClearBackupTables()
+
+
+'
+' Routines to handle table opening, getting its system name and closing,
+' all made by table file name. May be useful to avoid conflicts with same named tables.
+'
+Declare Function OpenTable(ByVal tableFileName As String) As String
+Declare Function GetTableName(ByVal tableFileName As String) As String
+Declare Sub CloseTable(ByVal tableFileName As String)
+Declare Sub CloseTables(tables() As String)
+Declare Function OpenTables(tableFiles() As String) As Logical
+
+
+'
+' Routines to handle table columns information.
+'
+Declare Sub GetColumnInfos(ByVal tableName As String, colInfos() As ColInfo)
+Declare Sub GetColumnInfosExt(ByVal tableName As String, colInfos() As ColInfo, exclList() As String)
+Declare Sub CopyColumnInfo(src As ColInfo, dst As ColInfo)
+Declare Sub AddColumnInfoToArray(arr() As ColInfo, v As ColInfo)
+Declare Function ColumnInfoToString(colInfo As ColInfo) As String
+Declare Function GetColumnSize(colInfo As ColInfo) As Integer
+Declare Function GetRowSize(colInfos() As ColInfo) As Integer
+Declare Function ColumnInfosToString(colInfos() As ColInfo, ByVal glue As String) As String
+
+' Duplicates given table to a new one. If source table is mappable,
+' destination table will have map too. If data needed to be included,
+' dubData flag is used.
+Declare Function DuplicateTable(ByVal srcTable As String, ByVal destTable As String, ByVal outFile As String, ByVal dubData As Logical) As Logical
+Declare Function DuplicateTableExt(ByVal srcTable As String, ByVal destTable As String, ByVal outFile As String, colDefs() As ColInfo, ByVal dubData As Logical) As Logical
+
+
+'
+' MapInfo restricts text fields to MAX_CHAR_FIELD_LENGTH symbols.
+' To store some more, it is possible to use several fields to store
+' long strings and to read data from them.
+'
+' Functions operate on field named "fieldName", and extect that the rest fields
+' have names: fieldName1, fieldName2, ..., fieldNameN.
+'
+' Write function expects that length of all patrial fields equals to MAX_CHAR_FIELD_LENGTH.
+'
+' If there's only one field with name "fieldName" (there's no more column names
+' started with this name and appended with some integer number), only this field
+' is red.
+'
+Declare Function ReadLargeField(ByVal rowNum As Integer, ByVal tableName As String, ByVal fieldName As String) As String
+Declare Function WriteLargeField(ByVal rowNum As Integer, ByVal tableName As String, ByVal fieldName As String, ByVal data As String) As Logical
+
+
+'
+' Working with DataRows.
+'
+Declare Function DataRowToString(dr As DataRow, ByVal updateStatement As Logical) As String
+Declare Function SetDataRowCell(dr As DataRow, ByVal colIdx As SmallInt, ByVal data As String) As Logical
+Declare Sub AddDataCellToArray(arr() As DataCell, v As DataCell)
+Declare Sub CopyDataCell(src As DataCell, dst As DataCell)
+Declare Sub CreateDataCell(dc As DataCell, ci As ColInfo, ByVal data As String)
+Declare Sub CreateDataRow(dr As DataRow, colInfos() As ColInfo)

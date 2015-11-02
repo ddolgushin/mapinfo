@@ -1,0 +1,279 @@
+Include "mapbasic.def"
+Include "Bitwise.def"
+Include "Array.def"
+Include "Util.def"
+
+
+Declare Sub _And(a() As Logical, b() As Logical, res() As Logical)
+Declare Sub _Or(a() As Logical, b() As Logical, res() As Logical)
+Declare Sub _Xor(a() As Logical, b() As Logical, res() As Logical)
+Declare Sub _Not(a() As Logical, res() As Logical)
+Declare Sub JustifyBinary(a() As Logical, b() As Logical)
+Declare Sub TrimBinary(a() As Logical)
+
+
+Function BitwiseAnd(ByVal a As Integer, ByVal b As Integer) As Integer
+	Dim res As Integer
+	Dim _a(), _b(), _c() As Logical
+	
+	Call IntToBinary(a, _a)
+	Call IntToBinary(b, _b)
+	Call _And(_a, _b, _c)
+	
+	res = BinaryToInt(_c)
+	
+	BitwiseAnd = res
+End Function
+
+
+Function BitwiseOr(ByVal a As Integer, ByVal b As Integer) As Integer
+	Dim res As Integer
+	Dim _a(), _b(), _c() As Logical
+	
+	Call IntToBinary(a, _a)
+	Call IntToBinary(b, _b)
+	Call _Or(_a, _b, _c)
+	
+	res = BinaryToInt(_c)
+	
+	BitwiseOr = res
+End Function
+
+
+Function BitwiseXor(ByVal a As Integer, ByVal b As Integer) As Integer
+	Dim res As Integer
+	Dim _a(), _b(), _c() As Logical
+	
+	Call IntToBinary(a, _a)
+	Call IntToBinary(b, _b)
+	Call _Xor(_a, _b, _c)
+	
+	res = BinaryToInt(_c)
+	
+	BitwiseXor = res
+End Function
+
+
+Function BitwiseNot(ByVal a As Integer) As Integer
+	Dim res, i, size As Integer
+	Dim _a(), _b() As Logical
+	
+	Call IntToBinary(a, _a)
+	Call _Not(_a, _b)
+	
+	res = BinaryToInt(_b)
+	
+	BitwiseNot = res
+End Function
+
+
+'
+' Convert integer to its binary representation.
+'
+Sub IntToBinary(ByVal a As Integer, b() As Logical)
+	Dim i, pow, remainder, tmp As Integer
+	
+	a = Abs(a)
+	pow = 0
+	
+	Do While TRUE
+		If 2 ^ pow > a Then
+			pow = pow - 1
+			
+			Exit Do
+		End If
+		
+		pow = pow + 1
+	Loop
+	
+	If pow < 0 Then
+		ReDim b(1)
+		
+		b(1) = 0
+	ElseIf pow = 0 Then
+		ReDim b(1)
+		
+		b(1) = 1
+	Else
+		ReDim b(pow + 1)
+		
+		remainder = a
+		i = 1
+		
+		Do While pow >= 0
+			tmp = remainder - 2 ^ pow
+			
+			If tmp >= 0 Then
+				b(i) = 1
+				remainder = tmp
+			Else
+				b(i) = 0
+			End If
+			
+			pow = pow - 1
+			i = i + 1
+		Loop
+	End If
+End Sub
+
+
+'
+' Convert binary to integer.
+'
+Function BinaryToInt(a() As Logical) As Integer
+	Dim res, i, size As Integer
+	
+	size = UBound(a)
+	
+	For i = size To 1 Step -1
+		res = res + LogicalToInt(a(i)) * 2 ^ (size - i)
+	Next
+	
+	BinaryToInt = res
+End Function
+
+
+Function BinaryToString(a() As Logical) As String
+	Dim res As String
+	Dim i, size As Integer
+	
+	size = UBound(a)
+	
+	For i = 1 To size
+		res = res + Str$(LogicalToInt(a(i)))
+	Next
+	
+	BinaryToString = res
+End Function
+
+
+'******************************************************************************
+'*                                                                            *
+'* Internal stuff                                                             *
+'*                                                                            *
+'******************************************************************************
+
+
+Sub _And(a() As Logical, b() As Logical, res() As Logical)
+	Dim i, size As Integer
+	
+	Call JustifyBinary(a, b)
+	
+	size = UBound(a)
+	
+	ReDim res(size)
+	
+	For i = 1 To size
+		res(i) = (a(i) And b(i))
+	Next
+	
+	Call TrimBinary(res)
+End Sub
+
+
+Sub _Or(a() As Logical, b() As Logical, res() As Logical)
+	Dim i, size As Integer
+	
+	Call JustifyBinary(a, b)
+	
+	size = UBound(a)
+	
+	ReDim res(size)
+	
+	For i = 1 To size
+		res(i) = (a(i) Or b(i))
+	Next
+	
+	Call TrimBinary(res)
+End Sub
+
+
+Sub _Xor(a() As Logical, b() As Logical, res() As Logical)
+	Dim i, size As Integer
+	
+	Call JustifyBinary(a, b)
+	
+	size = UBound(a)
+	
+	ReDim res(size)
+	
+	For i = 1 To size
+		res(i) = ((a(i) Or b(i)) And Not (a(i) And b(i)))
+	Next
+	
+	Call TrimBinary(res)
+End Sub
+
+
+Sub _Not(a() As Logical, res() As Logical)
+	Dim i, size As Integer
+	
+	size = UBound(a)
+	
+	ReDim res(size)
+	
+	For i = 1 To size
+		res(i) = (Not a(i))
+	Next
+	
+	Call TrimBinary(res)
+End Sub
+
+
+'
+' Fills smaller bit array with preceding zeroes:
+'    10101010       111 given,
+'    10101010  00000111 obtained.
+'
+Sub JustifyBinary(a() As Logical, b() As Logical)
+	Dim size1, size2, diff, i As Integer
+	
+	size1 = UBound(a)
+	size2 = UBound(b)
+	
+	If size1 <> size2 Then
+		diff = Abs(size1 - size2)
+		
+		If size1 > size2 Then
+			For i = 1 To diff
+				Call AddLogicalToArrayHead(b, FALSE)
+			Next
+		Else
+			For i = 1 To diff
+				Call AddLogicalToArrayHead(a, FALSE)
+			Next
+		End If
+	End If
+End Sub
+
+
+'
+' Cut unwanted preceding zeroes:
+'    00000111 given,
+'         111 obtained.
+'
+Sub TrimBinary(a() As Logical)
+	Dim i, size As Integer
+	Dim emptyYet As Logical
+	Dim tmp() As Logical
+	
+	size = UBound(a)
+	
+	If size > 0 Then
+		Call CopyLogicalArray(a, tmp)
+		
+		emptyYet = (Not a(1))
+		
+		ReDim a(0)
+		
+		For i = 1 To size
+			If emptyYet And tmp(i) Then
+				emptyYet = FALSE
+			End If
+			
+			If Not emptyYet Then
+				Call AddLogicalToArray(a, tmp(i))
+			End If
+		Next
+	End If
+End Sub

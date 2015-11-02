@@ -1,0 +1,22 @@
+'
+' Date-time structure composed. Month is started from 1.
+'
+Type DateTime
+	y As Integer
+	m As Integer
+	d As Integer
+	hr As Integer
+	min As Integer
+	sec As Integer
+End Type
+
+
+Declare Sub GetCurrentDate(dt As DateTime)
+Declare Sub ResetDateTime(dt As DateTime)
+
+Declare Function ParseDate(ByVal dateStr As String, dt As DateTime) As Logical
+Declare Function DateToString(dt As DateTime) As String
+Declare Function DateToUSString(dt As DateTime) As String
+Declare Function DateTimeToString(dt As DateTime) As String
+Declare Function DateTimeToUSString(dt As DateTime) As String
+Declare Function DateIsEmpty(dt As DateTime) As Logical

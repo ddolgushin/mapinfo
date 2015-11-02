@@ -1,0 +1,1594 @@
+Include "mapbasic.def"
+Include "GeoTools.def"
+Include "TableTools.def"
+Include "ObjectTools.def"
+Include "../util/HashTable.def"
+Include "../util/Util.def"
+Include "../util/PathTools.def"
+Include "../util/Array.def"
+Include "../util/Logger.def"
+Include "../math/Util.def"
+
+
+Declare Sub GetBoundPoint(nodes As PointList, ByVal order As Integer, p As Point2D, idx As Integer)
+Declare Sub ReorderIslands(islands() As Polygon, p As Point2D)
+Declare Sub CalcPolygonCentroid(poly As Polygon)
+Declare Sub RoundIt(x As Float, y As Float, ByVal roundFormat As Float)
+
+Declare Function InvertOrder(ByVal order As SmallInt) As SmallInt
+Declare Function CheckIfShouldInvert(p1 As Point2D, p2 As Point2D, pN As Point2D,
+	centroid As Point2D, ByVal swapXY As Logical, ByVal oldOrder As SmallInt) As Logical
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Processes Selection, more specific -- only regions contained in it.
+' Puts results into objs() array.
+'
+' NOTE 1: objects Disaggregate shoudn't be used here as it doesn't take into
+'       account the order of nested polygons, e.g. if object is a combination
+'       of several non-intersecting objects (and is a region itself). They
+'       could've been composed in special order with CombineSelection(...) routine,
+'       and Objects Disaggregate will break the order. Current "low-level"
+'       implementation treats order of all internal objects correctly.
+'
+' NOTE 2: areas for each object are calculated "on-the-fly", taking islands
+'       into account (their areas are subtracted from main object area).
+'
+' NOTE 3: order should be inverted in case of coordinates swap (it is made
+'       automatically).
+'
+' NOTE 4: if object is a merged one, program determines which parts of it
+'       are islands and separate objects, and treats them respectively.
+'       It means if object is composed of three and first has an island,
+'       result will contain three objects of Obj type and first will
+'       have one element in its islands array.
+'
+Sub ExtractRegionNodes(objs() As Obj, ByVal order As Integer, ByVal swapXY As Logical,
+		ByVal checkDubs As Logical, ByVal useBackup As Logical)
+	Dim baseTable, tmpTable As String
+	Dim curObj, tmpCurObj, tmpPrevObj As Object
+	Dim pointCount, objCount, islandCount, objCounter, islandCounter, i, j, k, size,
+		objType, refPointIdx, parentIdx, islandIdx As Integer
+	Dim isDub As Logical
+	Dim p, refPoint, tmpP, tmpP2, tmpP3 As Point2D
+	Dim tmpArea, area1, area2, tmpCoord As Float
+	Dim tmpObjs() As Polygon
+	Dim curO As Polygon
+	Dim oldOrder As SmallInt
+	Dim shouldInvert, keepObject As Logical
+	
+	ReDim objs(0)
+	
+	baseTable = SelectionInfo(SEL_INFO_TABLENAME)
+	tmpTable = GetTempTableName()
+	oldOrder = order
+
+	
+	' I. Create temporary table for objects.
+	Create Table tmpDivTable (
+			idx Integer,
+			s Float,
+			island Logical,
+			parent Integer
+		) File tmpTable
+	Create Map For tmpDivTable Using baseTable
+	
+	If SelectionInfo(SEL_INFO_NROWS) > 0
+			And Len(baseTable) > 0
+			And TableInfo(baseTable, TAB_INFO_MAPPABLE) Then
+		If useBackup Then
+			Call BackupSelection("tmpExtractRegionNodesBackupTable")
+		End If
+		
+		If swapXY Then order = InvertOrder(order) End If
+		
+		Set Area Units("sq m")
+		
+		Select * From Selection Into tmpSelectedObjectsTable Noselect
+		Fetch First From tmpSelectedObjectsTable
+		Delete From tmpDivTable
+
+		Do While Not EOT(tmpSelectedObjectsTable)
+			curObj = tmpSelectedObjectsTable.obj
+			objType = ObjectInfo(curObj, OBJ_INFO_TYPE)
+
+			If Not objType = OBJ_TYPE_REGION Then
+				Call LogMsg(LOG_LEVEL_WARN,
+					"ExtractRegionNodes(...): object must be a region, got "
+					+ GetObjectTypeName(objType))
+			Else
+				objCount = ObjectInfo(curObj, OBJ_INFO_NPOLYGONS)
+
+				' II. Low-level decomposition.
+				For i = 1 To objCount
+					pointCount = ObjectInfo(curObj, OBJ_INFO_NPOLYGONS + i)
+					objCounter = objCounter + 1
+
+					ReDim tmpObjs(objCounter)
+
+					Call PointListClear(tmpObjs(objCounter).nodes)
+					
+					' The last point (pointCount one) always duplicates the first one, so skip it.
+					For j = 1 To pointCount - 1
+						Call CreatePoint2D(p,
+							ObjectNodeX(curObj, i, j),
+							ObjectNodeY(curObj, i, j))
+						
+						If swapXY Then Call SwapF(p.x, p.y) End If
+						
+						isDub = FALSE
+						size = PointListGetSize(tmpObjs(objCounter).nodes)
+						
+						For k = 1 To size
+							Call PointListGet(tmpObjs(objCounter).nodes, k, tmpP)
+
+							If tmpP.x = p.x And tmpP.y = p.y Then
+								isDub = TRUE
+								
+								Exit For
+							End If
+						Next
+						
+						' Avoid dubs.
+						If Not isDub Then
+							Call PointListAdd(tmpObjs(objCounter).nodes, p)
+						End If
+					Next
+					
+					tmpCurObj = CreateRegionFromPoints(tmpObjs(objCounter).nodes, swapXY)
+					
+					Insert Into tmpDivTable (obj, idx, s) Values (tmpCurObj, objCounter, Area(tmpCurObj, "sq m"))
+				Next
+			End If
+			
+			Fetch Next From tmpSelectedObjectsTable
+		Loop
+
+		Close Table tmpSelectedObjectsTable
+
+
+		' III. Find islands by intersection.
+		Select * From tmpDivTable Into tmpOrdTable Noselect Order By s Desc
+		Fetch First From tmpOrdTable
+		
+		Do While Not EOT(tmpOrdTable)
+			If tmpOrdTable.parent = 0 Then
+				parentIdx = tmpOrdTable.idx
+				curObj = tmpOrdTable.obj
+				
+				Select * From tmpOrdTable Where parent = 0
+						And idx <> parentIdx
+						And Not island
+						And obj Entirely Within curObj
+					Into tmpIslandTable Noselect
+				
+				Update tmpIslandTable Set parent = parentIdx, island = TRUE
+			End If
+			
+			Fetch Next From tmpOrdTable
+		Loop
+
+
+		' IV. Put data into objs array.
+		objCounter = 0
+
+		Select * From tmpDivTable Where Not island Into tmpOrdTable Noselect
+		
+		ReDim objs(TableInfo(tmpOrdTable, TAB_INFO_NROWS))
+		
+		Do While Not EOT(tmpOrdTable)
+			tmpArea = tmpOrdTable.s
+			curObj = tmpOrdTable.obj
+			parentIdx = tmpOrdTable.idx
+			objCounter = objCounter + 1
+			
+			Call PointListCopy(tmpObjs(parentIdx).nodes, objs(objCounter).main.nodes)
+			
+			Select Sum(s) "s" From tmpDivTable
+				Where parent = parentIdx
+				Into tmpAreaTable Noselect
+			
+			objs(objCounter).area = tmpArea - tmpAreaTable.s
+
+			Call CalcPolygonCentroid(objs(objCounter).main)
+
+'			objs(objCounter).main.centroid.x = CentroidX(curObj)
+'			objs(objCounter).main.centroid.y = CentroidY(curObj)
+
+'			If swapXY Then
+'				Call SwapF(objs(objCounter).main.centroid.x,
+'					objs(objCounter).main.centroid.y)
+'			End If
+			
+			Select * From tmpDivTable
+				Where parent = parentIdx
+				Into tmpIslandTable Noselect
+				Order By idx
+			
+			ReDim objs(objCounter).islands(TableInfo(tmpIslandTable, TAB_INFO_NROWS))
+			
+			islandCounter = 0
+
+			Do While Not EOT(tmpIslandTable)
+				curObj = tmpIslandTable.obj
+				islandCounter = islandCounter + 1
+				islandIdx = tmpIslandTable.idx
+				
+				Call PointListCopy(tmpObjs(islandIdx).nodes, objs(objCounter).islands(islandCounter).nodes)
+				Call CalcPolygonCentroid(objs(objCounter).islands(islandCounter))
+'				objs(objCounter).islands(islandCounter).centroid.x = CentroidX(curObj)
+'				objs(objCounter).islands(islandCounter).centroid.y = CentroidY(curObj)
+				
+'				If swapXY Then
+'					Call SwapF(objs(objCounter).islands(islandCounter).centroid.x,
+'						objs(objCounter).islands(islandCounter).centroid.y)
+'				End If
+
+				Fetch Next From tmpIslandTable
+			Loop
+			
+			Fetch Next From tmpOrdTable
+		Loop
+		
+		If IsTableOpen("tmpAreaTable") Then Close Table tmpAreaTable End If
+		If IsTableOpen("tmpIslandTable") Then Close Table tmpIslandTable End If
+		
+		Close Table tmpOrdTable
+
+
+		' V. Reorder all objects' points starting from given corner point (NW, N, NE etc.).
+		objCount = UBound(objs)
+
+		For i = 1 To objCount
+			' Define which point is nearest to "order" variable (north-west etc.),
+			' get its index.
+			Call GetBoundPoint(objs(i).main.nodes, order, refPoint, refPointIdx)
+			' Make node which is the nearest to reference point first in nodes array.
+			Call PointListReorder(objs(i).main.nodes, refPointIdx)
+			Call PointListGet(objs(i).main.nodes, 1, tmpP)
+			Call PointListGet(objs(i).main.nodes, 2, tmpP2)
+			Call PointListGet(objs(i).main.nodes, PointListGetSize(objs(i).main.nodes), tmpP3)
+			
+			islandCount = UBound(objs(i).islands)
+			shouldInvert = CheckIfShouldInvert(tmpP, tmpP2, tmpP3, objs(i).main.centroid, swapXY, oldOrder)
+			
+			' Re-order itself and shift by one point, because after reorder
+			' the point that sould be first becomes the last.
+			If shouldInvert Then
+				Call PointListInvert(objs(i).main.nodes)
+				Call PointListReorder(objs(i).main.nodes, PointListGetSize(objs(i).main.nodes))
+			End If
+			
+			' Place islands by distance from reference point.
+			Call ReorderIslands(objs(i).islands, refPoint)
+			
+			' For each island, reorder its point according to specified start direction,
+			' just like the objects processed.
+			For j = 1 To islandCount
+				Call GetBoundPoint(objs(i).islands(j).nodes, order, refPoint, refPointIdx)
+				Call PointListReorder(objs(i).islands(j).nodes, refPointIdx)
+				Call PointListGet(objs(i).islands(j).nodes, 1, tmpP)
+				Call PointListGet(objs(i).islands(j).nodes, 2, tmpP2)
+				Call PointListGet(objs(i).islands(j).nodes, PointListGetSize(objs(i).islands(j).nodes), tmpP3)
+				
+				shouldInvert = CheckIfShouldInvert(tmpP, tmpP2, tmpP3, objs(i).islands(j).centroid, swapXY, oldOrder)
+				
+				If shouldInvert Then
+					Call PointListInvert(objs(i).islands(j).nodes)
+					Call PointListReorder(objs(i).islands(j).nodes, PointListGetSize(objs(i).islands(j).nodes))
+				End If
+			Next
+		Next
+
+		Drop Table tmpDivTable
+		
+		If useBackup Then
+			Call RestoreSelection("tmpExtractRegionNodesBackupTable")
+		End If
+	End If
+End Sub
+
+
+'
+' Check if nodes are not CW ordered.
+'
+Function CheckIfShouldInvert(p1 As Point2D, p2 As Point2D, pN As Point2D,
+		centroid As Point2D, ByVal swapXY As Logical, ByVal order As SmallInt) As Logical
+	Dim res As Logical
+	Dim l1, l2 As Line2D
+	Dim v1, v2 As Vector2D
+	Dim vhD1, vvD1, vhD2, vvD2, cmpResult As SmallInt
+	
+	' Check if points of main object are in CW order, and reorder
+	' them if needed.
+	Call CreateLine2D(l1, p1, p2)
+	Call CreateLine2D(l2, pN, p1)
+	
+	' Turn coordinates back, if it should be done.
+	If swapXY Then
+		Call InvertLine(l1)
+		Call InvertLine(l2)
+		
+		Call SwapF(p1.x, p1.y)
+		Call SwapF(p2.x, p2.y)
+		Call SwapF(pN.x, pN.y)
+		Call SwapF(centroid.x, centroid.y)
+	End If
+	
+	Call GetLine2DVector(l1, v1)
+	Call GetLine2DVector(l2, v2)
+
+
+	' DBG
+'	Dim tableName As String
+'	tableName = "участки_ВОЛС_НВ_запас10_cut"
+'	tableName = "участки_ВОЛС_НВ_запас10"
+'	Insert Into tableName (obj) Values (CreatePoint(p1.x, p1.y))
+'	Insert Into tableName (obj) Values (CreatePoint(p2.x, p2.y))
+'	Insert Into tableName (obj) Values (CreatePoint(pN.x, pN.y))
+'	Insert Into tableName (obj) Values (CreatePoint(centroid.x, centroid.y))
+
+	
+	vhD1 = GetVector2DHorizontalDirection(v1)
+	vhD2 = GetVector2DHorizontalDirection(v2)
+	vvD1 = GetVector2DVerticalDirection(v1)
+	vvD2 = GetVector2DVerticalDirection(v2)
+'	cmpResult = Compare2DLines(l1, l2)
+	' For a while.
+	res = TRUE
+	
+	If order = ORDER_SW Or order = ORDER_W Or order = ORDER_NW
+			Or order = ORDER_N Or order = ORDER_NE Then
+		If (p1.x < centroid.x
+					And (vvD1 = vvD2 And vvD1 <> DIRECTION_SOUTH And vhD1 = DIRECTION_EAST))
+				Or (p1.y > centroid.y And vhD1 = DIRECTION_EAST And Not (vvD1 = vvD2 And vvD1 = DIRECTION_SOUTH))
+				Or (p1.y > centroid.y And p1.x > centroid.x And vhD1 = vhD2 And vhD1 = DIRECTION_WEST)
+				Or (p1.y < centroid.y And p1.x < centroid.x And vhD1 = vhD2 And vhD1 = DIRECTION_WEST)
+				Or (vhD2 = DIRECTION_EAST) Then
+			res = FALSE
+			
+'			' DBG
+'			Print ">1 " + Time(24)
+		End If
+	ElseIf order = ORDER_E Or order = ORDER_SE Or order = ORDER_S Then
+		If (p1.x > centroid.x
+					And (vvD1 = vvD2 And vvD1 <> DIRECTION_NORTH And vhD1 = DIRECTION_WEST))
+				Or (p1.y < centroid.y And vhD1 = DIRECTION_WEST And Not (vvD1 = vvD2 And vvD1 = DIRECTION_NORTH))
+				Or (p1.y < centroid.y And p1.x < centroid.x And vhD1 = vhD2 And vhD1 = DIRECTION_EAST)
+				Or (p1.y > centroid.y And p1.x > centroid.x And vhD1 = vhD2 And vhD1 = DIRECTION_EAST)
+				Or (vhD2 = DIRECTION_WEST) Then
+			res = FALSE
+			
+'			' DBG
+'			Print ">2" + Time(24)
+		End If			
+	End If
+	
+'	' DBG
+'	Print ">> " + p1.y + "   " + p2.y + "   " + pN.y + "   " + centroid.y + "   " + vvD1 + "   " + vvD2 + "   " + res
+
+'	' DBG
+'	Print vhD1 + " / " + vhD2 + " / " + vvD1 + " / " + vvD1 + " / " + cmpResult + "   " + res
+'	Print "Centroid: " + Point2DToString(centroid)
+'	Print "Lines: " + Line2DToString(l1) + "   " + Line2DToString(l2)
+	
+	' Invert back, if needed.
+	If swapXY Then
+		Call SwapF(p1.x, p1.y)
+		Call SwapF(p2.x, p2.y)
+		Call SwapF(pN.x, pN.y)
+		Call SwapF(centroid.x, centroid.y)
+	End If
+	
+	CheckIfShouldInvert = res
+End Function
+
+
+Sub ExtractPLineNodes(pline As Object, mpline As MPLine, ByVal swapXY As Logical)
+	Dim i, j, pointCount, partCount As Integer
+	Dim oType As SmallInt
+	Dim p As Point2D
+	Dim tmpPLine As PLine
+	
+	ReDim mpline.plines(0)
+	
+	oType = ObjectInfo(pline, OBJ_INFO_TYPE)
+	
+	If oType = OBJ_TYPE_PLINE Then
+		partCount = ObjectInfo(pline, OBJ_INFO_NPOLYGONS)
+		
+		For i = 1 To partCount
+			ReDim tmpPLine.nodes(0)
+			
+			pointCount = ObjectInfo(pline, OBJ_INFO_NPOLYGONS + i)
+
+			For j = 1 To pointCount
+				p.x = ObjectNodeX(pline, i, j)
+				p.y = ObjectNodeY(pline, i, j)
+				
+				If swapXY Then Call SwapF(p.x, p.y) End If
+
+				Call AddPoint2DToArray(tmpPLine.nodes, p)
+			Next
+			
+			Call GetCentroid(tmpPLine.nodes, tmpPLine.centroid)
+			Call AddPLineToArray(mpline.plines, tmpPLine)
+		Next
+
+		Call CreatePoint2D(mpline.centroid, CentroidX(pline), CentroidY(pline))
+	ElseIf oType = OBJ_TYPE_LINE Then
+		ReDim mpline.plines(1)
+
+		p.x = ObjectGeography(pline, OBJ_GEO_LINEBEGX)
+		p.y = ObjectGeography(pline, OBJ_GEO_LINEBEGY)
+		
+		If swapXY Then Call SwapF(p.x, p.y) End If
+
+		Call AddPoint2DToArray(mpline.plines(1).nodes, p)
+		
+		p.x = ObjectGeography(pline, OBJ_GEO_LINEENDX)
+		p.y = ObjectGeography(pline, OBJ_GEO_LINEENDY)
+		
+		If swapXY Then Call SwapF(p.x, p.y) End If
+
+		Call AddPoint2DToArray(mpline.plines(1).nodes, p)
+		Call CreatePoint2D(mpline.plines(1).centroid, CentroidX(pline), CentroidY(pline))
+	End If
+End Sub
+
+
+Sub AddPLineToArray(arr() As PLine, pl As PLine)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	Call CopyPLine(pl, arr(size))
+End Sub
+
+
+Sub AddMPLineToArray(arr() As MPLine, mpl As MPLine)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	Call CopyMPLine(mpl, arr(size))
+End Sub
+
+
+Sub CopyPLine(src As PLine, dst As PLine)
+	Call CopyPoint2DArray(src.nodes, dst.nodes)
+	Call CopyPoint2D(src.centroid, dst.centroid)
+End Sub
+
+
+Sub CopyMPLine(src As MPLine, dst As MPLine)
+	Dim i, size As Integer
+
+	size = UBound(src.plines)
+
+	ReDim dst.plines(size)
+
+	For i = 1 To size
+		Call CopyPLine(src.plines(i), dst.plines(i))
+	Next
+
+	Call CopyPoint2D(src.centroid, dst.centroid)
+End Sub
+
+
+Sub AddObjToArray(arr() As Obj, o As Obj)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	Call CopyObj(o, arr(size))
+End Sub
+
+
+'
+' Copy Obj structure.
+'
+Sub CopyObj(src As Obj, dst As Obj)
+	Dim i, size As Integer
+	
+	dst.type = src.type
+	dst.area = src.area
+	
+	Call PointListCopy(src.main.nodes, dst.main.nodes)
+	Call CopyPoint2D(src.main.centroid, dst.main.centroid)
+	
+	size = UBound(src.islands)
+	
+	ReDim dst.islands(size)
+	
+	For i = 1 To size
+		Call PointListCopy(src.islands(i).nodes, dst.islands(i).nodes)
+		Call CopyPoint2D(src.islands(i).centroid, dst.islands(i).centroid)
+	Next
+End Sub
+
+
+'
+' Get list of Obj nodes, either just for main or both for main and its islands.
+'
+Sub GetObjNodes(obj As Obj, nodes As PointList, ByVal includeIslands As Logical)
+	Dim i, j, pointCount, size As Integer
+	Dim tmpP As Point2D
+	
+	Call PointListClear(nodes)
+	Call PointListCopy(obj.main.nodes, nodes)
+	
+	If includeIslands Then
+		size = UBound(obj.islands)
+		
+		For i = 1 To size
+			pointCount = PointListGetSize(obj.islands(i).nodes)
+			
+			For j = 1 To pointCount
+				Call PointListGet(obj.islands(i).nodes, j, tmpP)
+				Call PointListAdd(nodes, tmpP)
+			Next
+		Next
+	End If
+End Sub
+
+
+'
+' If more than one object are given, sort them by general NW point.
+'
+' I.e. calculate their common minimum rectangle and place objects in array
+' by growth of their distance from this point.
+'
+Sub OrderObjectsByNW(objs() As Obj)
+	Dim size As Integer
+	Dim tmpObjs() As Obj
+	Dim tmpObj As Obj
+	Dim nwPoint, generalNWPoint As Point2D
+	Dim nwPoints() As Point2D
+	Dim i, tmpIdx As Integer
+	Dim minX, maxY As Float
+	Dim idx2Distance As HashTable
+	Dim idxs() As String
+	Dim dist As Float
+	
+	size = UBound(objs)
+	
+	If size > 1 Then
+		ReDim tmpObjs(size)
+		
+		' Collect NW points, find out general NW point.
+		For i = 1 To size
+			Call GetBoundPoint(objs(i).main.nodes, ORDER_NW, nwPoint, tmpIdx)
+			Call AddPoint2DToArray(nwPoints, nwPoint)
+			
+			If i = 1 Then
+				minX = nwPoint.x
+				maxY = nwPoint.y
+			Else
+				If nwPoint.x < minX Then minX = nwPoint.x End If
+				If nwPoint.y > maxY Then maxY = nwPoint.y End If
+			End If
+		Next
+		
+		Call CreatePoint2D(generalNWPoint, minX, maxY)
+		
+		For i = 1 To size
+			dist = Distance(generalNWPoint.x, generalNWPoint.y, nwPoints(i).x, nwPoints(i).y, "m")
+			
+			Call HashTableAddBlind(idx2Distance, i, dist)
+		Next
+		
+		Call HashTableSort(idx2Distance, 1, 1)
+		Call HashTableGetKeys(idx2Distance, idxs)
+		
+		For i = 1 To size
+			tmpIdx = StrToInt(idxs(i))
+			
+			Call CopyObj(objs(tmpIdx), tmpObjs(i))
+		Next
+		
+		For i = 1 To size
+			Call CopyObj(tmpObjs(i), objs(i))
+		Next
+	End If
+End Sub
+
+
+'
+' Create Rect object.
+'
+Sub CreateRect(r As Rect, p1 As Point2D, p2 As Point2D)
+	Create Rect
+		Into Variable r.o (p1.x, p1.y) (p2.x, p2.y)
+End Sub
+
+
+'
+' Find out if given structs of Rect type are intersecting.
+'
+Function RectsIntersecting(rect1 As Rect, rect2 As Rect) As Logical
+	RectsIntersecting = AreaOverlap(rect1.o, rect2.o) > 0
+End Function
+
+
+'
+' Put MapBasic Object's nodes into nodes array. Islands not taken into account.
+' Dubs excluded.
+'
+Sub GetObjectNodes(obj As Object, nodes() As Point2D)
+	Call GetObjectNodesExt(obj, nodes, TRUE)
+End Sub
+
+
+Sub GetObjectNodesExt(obj As Object, nodes() As Point2D, ByVal noDubs As Logical)
+	Dim objType As SmallInt
+	Dim i, size, polyCount As Integer
+	Dim x, y As Float
+	Dim p As Point2D
+	Dim canAdd As Logical
+	
+	objType = ObjectInfo(obj, OBJ_INFO_TYPE)
+	
+	If objType = OBJ_TYPE_PLINE Or objType = OBJ_TYPE_REGION Then
+		polyCount = ObjectInfo(obj, OBJ_INFO_NPOLYGONS)
+		
+		If polyCount > 1 Then
+			Call LogMsg(LOG_LEVEL_WARN, "GetObjectNodesExt(...): object contains "
+				+ polyCount + " polygon(s). Only first will be processed")
+		End If
+		
+		size = ObjectInfo(obj, OBJ_INFO_NPOLYGONS + 1)
+		
+		ReDim nodes(size)
+		
+		For i = 1 To size
+			canAdd = TRUE
+			x = ObjectNodeX(obj, 1, i)
+			y = ObjectNodeY(obj, 1, i)
+			
+			If noDubs Then
+				Call CreatePoint2D(p, x, y)
+				
+				canAdd = (ArraySearchPoint2D(nodes, p) < 1)
+			End If
+			
+			If canAdd Then
+				Call CreatePoint2D(nodes(i), x, y)
+			End If
+		Next
+	End If
+End Sub
+
+
+'
+' Get object's point nearest to one of covering rectangle.
+'
+' Corner is one of predefined constants: CORNER_NW, CORNER_NE, CORNER_SE, CORNER_SW
+'
+Sub GetObjectCornerPoint(obj As Object, cp As Point2D, ByVal corner As SmallInt)
+	Dim tmpX, tmpY As Float
+	Dim tmpP, p As Point2D
+	Dim nodes() As Point2D
+	Dim i, size, targetIdx As Integer
+	Dim minDistance, curDistance As Float
+	
+	If corner = CORNER_NW Or corner = CORNER_NE Or corner = CORNER_SE
+			Or corner = CORNER_SW Then
+		If corner = CORNER_NW Then
+			tmpX = ObjectGeography(obj, OBJ_GEO_MINX)
+			tmpY = ObjectGeography(obj, OBJ_GEO_MAXY)
+		ElseIf corner = CORNER_NE Then
+			tmpX = ObjectGeography(obj, OBJ_GEO_MAXX)
+			tmpY = ObjectGeography(obj, OBJ_GEO_MAXY)
+		ElseIf corner = CORNER_SE Then
+			tmpX = ObjectGeography(obj, OBJ_GEO_MAXX)
+			tmpY = ObjectGeography(obj, OBJ_GEO_MINY)
+		ElseIf corner = CORNER_SW Then
+			tmpX = ObjectGeography(obj, OBJ_GEO_MINX)
+			tmpY = ObjectGeography(obj, OBJ_GEO_MINY)
+		End If
+		
+		Call CreatePoint2D(tmpP, tmpX, tmpY)
+		Call GetObjectNodes(obj, nodes)
+		
+		size = UBound(nodes)
+		
+		For i = 1 To size
+			Call CreatePoint2D(p, nodes(i).x, nodes(i).y)
+			
+			curDistance = GetDistanceBetweenPoints2D(tmpP, p)
+			
+			If i = 1 Then
+				minDistance = curDistance
+				targetIdx = i
+			Else
+				If curDistance < minDistance Then
+					minDistance = curDistance
+					targetIdx = i
+				End If
+			End If
+		Next
+		
+		Call CopyPoint2D(nodes(targetIdx), cp)
+	End If
+End Sub
+
+
+'
+' Get mininal object's covering rectangle corner points.
+'
+' It defines minimum and maximum X and Y coordinates amongst region nodes.
+'
+Sub GetRegionMinRectCorners(obj As Object, minX as Float, minY as Float,
+		maxX as Float, maxY as Float)
+	Dim i, size As Integer
+	Dim tmpX, tmpY As Float
+	
+	If ObjectInfo(obj, OBJ_INFO_TYPE) = OBJ_TYPE_REGION Then
+		size = ObjectInfo(obj, OBJ_INFO_NPOLYGONS + 1)
+		
+		For i = 1 To size
+			tmpX = ObjectNodeX(obj, 1, i)
+			tmpY = ObjectNodeY(obj, 1, i)
+			
+			If i = 1 Then
+				minX = tmpX
+				minY = tmpY
+				maxX = minX
+				maxY = minY
+			Else
+				If tmpX < minX Then minX = tmpX End If
+				If tmpY < minY Then minY = tmpY End If
+				If tmpX > maxX Then maxX = tmpX End If
+				If tmpY > maxY Then maxY = tmpY End If
+			End If
+		Next
+	End If
+End Sub
+
+
+'
+' Combine all objects from given table. It may contain objects in needed order.
+'
+Function CombineSelection(oRes As Object) As Logical
+	Dim res As Logical
+	Dim tableName As String
+	Dim oTmp As Object
+	Dim i As Integer
+	Dim oType As SmallInt
+	
+	tableName = SelectionInfo(SEL_INFO_TABLENAME)
+	i = 1
+	
+	If SelectionInfo(SEL_INFO_NROWS) > 0
+			And TableInfo(tableName, TAB_INFO_MAPPABLE) Then
+		Run Command "Select obj From Selection"
+			+ " Where obj Into tmpCombineSelTable Noselect"
+		
+		Fetch First From tmpCombineSelTable
+		
+		Do While Not EOT(tmpCombineSelTable)
+			oTmp = tmpCombineSelTable.obj
+			oType = ObjectInfo(oTmp, OBJ_INFO_TYPE)
+
+			If oType <> OBJ_TYPE_TEXT Then
+				If i = 1 Then oRes = oTmp
+				Else oRes = Combine(oRes, oTmp) End If
+
+				i = i + 1
+			End If
+			
+			Fetch Next From tmpCombineSelTable
+		Loop
+		
+		' Fixes error occuring when objects are located in cosmetic layer.
+		If Not IsLayerCosmetic(tableName) Then
+			Close Table tmpCombineSelTable
+		End If
+		
+		res = TRUE
+	End If
+	
+	CombineSelection = res
+End Function
+
+
+'
+' Low-level combine all objects from given table, which may contain
+' pre-ordered objects.
+'
+' NOTE: standard merge operation doesn't take object order into account.
+'
+Function CombineSelectionExt(oRes As Object) As Logical
+	Dim res, hasOnlyLines, hasMixedObjects As Logical
+	Dim tableName As String
+	Dim curObjIdx, i, j, k, l, m, size, objCount, islandCount, pointCount As Integer
+	Dim order, objType As SmallInt
+	Dim tmpObj As Object
+	Dim objs() As Obj
+	Dim tmpP As Point2D
+	Dim mpline As MPLine
+	Dim objTypes() As String
+	
+	order = ORDER_NW
+	tableName = SelectionInfo(SEL_INFO_TABLENAME)
+	hasOnlyLines = TRUE
+	hasMixedObjects = FALSE
+	
+	If SelectionInfo(SEL_INFO_NROWS) > 0
+			And TableInfo(tableName, TAB_INFO_MAPPABLE) Then
+		Select obj From Selection Where obj Into tmpCombineSelTable Noselect
+		
+		size = TableInfo("tmpCombineSelTable", TAB_INFO_NROWS)
+		
+		Do While Not EOT(tmpCombineSelTable)
+			tmpObj = tmpCombineSelTable.obj
+			objType = ObjectInfo(tmpObj, OBJ_INFO_TYPE)
+			
+			Call AddStringToArray(objTypes, Str$(objType))
+
+			If Not (objType = OBJ_TYPE_LINE Or objType = OBJ_TYPE_PLINE) Then
+				hasOnlyLines = FALSE
+			End If
+
+			Fetch Next From tmpCombineSelTable
+		Loop
+
+		hasMixedObjects = (ArrayUnique(objTypes, objTypes) > 1) And Not hasOnlyLines
+
+		If Not hasMixedObjects Then
+			If hasOnlyLines Then
+				Create PLine Into Variable oRes 0
+			Else
+				Create Region Into Variable oRes 0
+			End If
+		End If
+		
+		For i = 1 To size
+			Select * From tmpCombineSelTable Where RowID=i
+			Fetch First From Selection
+			
+			tmpObj = Selection.obj
+			objType = ObjectInfo(tmpObj, OBJ_INFO_TYPE)
+
+			If objType = OBJ_TYPE_TEXT Then
+				Call LogMsg(LOG_LEVEL_WARN, "CombineSelectionExt(...): text object encountered. Skipped.")
+			Else
+				If Not hasMixedObjects Then
+					If objType = OBJ_TYPE_PLINE Or objType = OBJ_TYPE_LINE Then
+						Call ExtractPLineNodes(tmpObj, mpline, FALSE)
+						
+						objCount = UBound(mpline.plines)
+						
+						For j = 1 To objCount
+							Call Inc(curObjIdx)
+							
+							pointCount = UBound(mpline.plines(j).nodes)
+							
+							For k = 1 To pointCount
+								Alter Object oRes
+									Node Add Position curObjIdx, k (
+										mpline.plines(j).nodes(k).x,
+										mpline.plines(j).nodes(k).y
+									)
+							Next
+						Next
+					ElseIf objType = OBJ_TYPE_REGION Then
+						Call ExtractRegionNodes(objs, order, FALSE, FALSE, FALSE)
+						
+						objCount = UBound(objs)
+						
+						For j = 1 To objCount
+							Call Inc(curObjIdx)
+							
+							pointCount = PointListGetSize(objs(j).main.nodes)
+							
+							For k = 1 To pointCount
+								Call PointListGet(objs(j).main.nodes, k, tmpP)
+
+								Alter Object oRes Node Add Position curObjIdx, k (tmpP.x, tmpP.y)
+							Next
+							
+							islandCount = UBound(objs(j).islands)
+							
+							For l = 1 To islandCount
+								Call Inc(curObjIdx)
+								
+								pointCount = PointListGetSize(objs(j).islands(l).nodes)
+								
+								For m = 1 To pointCount
+									Call PointListGet(objs(j).islands(l).nodes, m, tmpP)
+
+									Alter Object oRes
+										Node Add Position curObjIdx, m (tmpP.x, tmpP.y)
+								Next
+							Next
+						Next
+					End If
+				Else
+					' If selection is a mix of different type objects, assign first
+					' to result in order to be able to combine it with others.	
+					If i = 1 And hasMixedObjects Then oRes = tmpObj
+					Else oRes = Combine(oRes, tmpObj) End If
+				End If
+			End If
+		Next
+		
+		' Fixes error occuring when objects are located in cosmetic layer.
+		If Not StartsWith(UCase$(tableName), "COSMETIC") Then
+			Close Table tmpCombineSelTable
+		End If
+		
+		res = TRUE
+	End If
+	
+	CombineSelectionExt = res
+End Function
+
+
+'
+' Select objects from target table by given object
+' and according to provided mode (intersects, partially covers, etc.).
+'
+Sub SelectBy(o As Object, ByVal targetTable As String,
+		ByVal mode As SmallInt)
+	If mode = SMODE_INTERSECTS
+			Or mode = SMODE_NOT_INTERSECTS
+			Or mode = SMODE_ENT_WITHIN
+			Or mode = SMODE_NOT_ENT_WITHIN
+			Or mode = SMODE_PART_WITHIN
+			Or mode = SMODE_NOT_PART_WITHIN
+			Or mode = SMODE_WITHIN
+			Or mode = SMODE_NOT_WITHIN
+			Or mode = SMODE_CONTAINS_ENTIRELY
+			Or mode = SMODE_NOT_CONTAINS_ENTIRELY
+			Or mode = SMODE_CONTAINS_PART
+			Or mode = SMODE_NOT_CONTAINS_PART
+			Or mode = SMODE_CONTAINS
+			Or mode = SMODE_NOT_CONTAINS Then
+		If mode = SMODE_NOT_INTERSECTS Then
+			Select * From targetTable Where Not obj Intersects o
+		ElseIf mode = SMODE_INTERSECTS Then
+			Select * From targetTable Where obj Intersects o
+		ElseIf mode = SMODE_NOT_ENT_WITHIN Then
+			Select * From targetTable Where Not obj Entirely Within o
+		ElseIf mode = SMODE_ENT_WITHIN Then
+			Select * From targetTable Where obj Entirely Within o
+		ElseIf mode = SMODE_NOT_PART_WITHIN Then
+			Select * From targetTable Where Not obj Partly Within o
+		ElseIf mode = SMODE_PART_WITHIN Then
+			Select * From targetTable Where obj Partly Within o
+		ElseIf mode = SMODE_NOT_WITHIN Then
+			Select * From targetTable Where Not obj Within o
+		ElseIf mode = SMODE_WITHIN Then
+			Select * From targetTable Where obj Within o
+		ElseIf mode = SMODE_NOT_CONTAINS_ENTIRELY Then
+			Select * From targetTable Where Not obj Contains Entire o
+		ElseIf mode = SMODE_CONTAINS_ENTIRELY Then
+			Select * From targetTable Where obj Contains Entire o
+		ElseIf mode = SMODE_NOT_CONTAINS_PART Then
+			Select * From targetTable Where Not obj Contains Part o
+		ElseIf mode = SMODE_CONTAINS_PART Then
+			Select * From targetTable Where obj Contains Part o
+		ElseIf mode = SMODE_NOT_CONTAINS Then
+			Select * From targetTable Where Not obj Contains o
+		ElseIf mode = SMODE_CONTAINS Then
+			Select * From targetTable Where obj Contains o
+		End If
+	End If
+End Sub			
+
+
+'
+' Get minimum rectangle that embraces all the points in given array.
+'
+Sub GetBounds(points() As Point2D, p1 As Point2D, p2 As Point2D)
+	Dim i, size As Integer
+	Dim minX, minY, maxX, maxY As Float
+	
+	size = UBound(points)
+	
+	If size > 0 Then
+		minX = points(1).x
+		minY = points(1).y
+		maxX = points(1).x
+		maxY = points(1).y
+		
+		For i = 2 To size
+			minX = GetMin2(minX, points(i).x)
+			minY = GetMin2(minY, points(i).y)
+			maxX = GetMax2(maxX, points(i).x)
+			maxY = GetMax2(maxY, points(i).y)
+		Next
+	End If
+	
+	Call CreatePoint2D(p1, minX, minY)
+	Call CreatePoint2D(p2, maxX, maxY)
+End Sub
+
+
+'
+' Get coordinate system clause for two tables, one of which
+' is a base table, and second -- contains points information,
+' i.e. has fields for X and Y coordinates.
+'
+' For example, there is one table with some graphical objects,
+' and another with some point data. Function defines minimum rectangle
+' outlining objects and points, and returns corresponding clause.
+'
+' NOTE: in case of too many points overflow is encountered.
+'       So using points array and GetBounds(...) here is dangerous.
+'
+Function GetSharedCSysClause(ByVal baseTableName As String,
+		ByVal pointsTableName As String, ByVal c1Field As String,
+		ByVal c2Field As String) As String
+	Dim res As String
+	Dim x, y As Float
+	Dim pos, i As Integer
+	Dim pMin, pMax As Point2D
+	Dim csi As CsInfo
+	
+	Run Command "Select " + c1Field + ", " + c2Field
+		+ " From " + pointsTableName
+		+ " Into tmpCSysGetterTable Noselect"
+	
+	Do While Not EOT(tmpCSysGetterTable)
+		x = StrToFloat(tmpCSysGetterTable.Col(1))
+		y = StrToFloat(tmpCSysGetterTable.Col(2))
+		
+		If i = 1 Then
+			pMin.x = x
+			pMin.y = y
+			pMax.x = x
+			pMax.y = y
+		End If
+		
+		pMin.x = GetMin2(pMin.x, x)
+		pMin.y = GetMin2(pMin.y, y)
+		pMax.x = GetMax2(pMax.x, x)
+		pMax.y = GetMax2(pMax.y, y)
+		
+		Fetch Next From tmpCSysGetterTable
+		
+		Call Inc(i)
+	Loop
+	
+	Call GetCoordSysInfo(baseTableName, csi)
+    
+	' Get common bounds.
+	pMin.x = GetMin2(pMin.x, csi.minX)
+	pMin.y = GetMin2(pMin.y, csi.minY)
+	pMax.x = GetMax2(pMax.x, csi.maxX)
+	pMax.y = GetMax2(pMax.y, csi.maxY)
+	
+	' Create coordinate system clause.
+	res = ModifyCsClause(baseTableName, pMin.x, pMin.y, pMax.x, pMax.y)
+	
+	Close Table tmpCSysGetterTable
+	
+	GetSharedCSysClause = res
+End Function
+
+
+'
+' Go through all nodes of given object and round their coordinates
+' to given format (like in Round(...): 0.01 for two digits after point).
+'
+Function RoundObjectNodes(o As Object, roundFormat As Float) As Logical
+	Dim res As Logical
+	Dim x1, y1, x2, y2 As Float
+	Dim oType As SmallInt
+	Dim polyCount, nodeCount, i, j As Integer
+	Dim baseTable, tmpTableFile1, tmpTableName1, tmpTableFile2, tmpTableName2 As String
+	Dim tmpObj As Object
+	
+	res = TRUE
+	oType = ObjectInfo(o, OBJ_INFO_TYPE)
+	baseTable = SelectionInfo(SEL_INFO_TABLENAME)
+	
+	If oType = OBJ_TYPE_POINT Then
+		x1 = ObjectGeography(o, OBJ_GEO_POINTX)
+		y1 = ObjectGeography(o, OBJ_GEO_POINTY)
+		
+		Call RoundIt(x1, y1, roundFormat)
+		
+		Alter Object o Geography OBJ_GEO_POINTX, x1
+		Alter Object o Geography OBJ_GEO_POINTY, y1
+	ElseIf oType = OBJ_TYPE_LINE Then
+		x1 = ObjectGeography(o, OBJ_GEO_LINEBEGX)
+		y1 = ObjectGeography(o, OBJ_GEO_LINEBEGY)
+		x2 = ObjectGeography(o, OBJ_GEO_LINEENDX)
+		y2 = ObjectGeography(o, OBJ_GEO_LINEENDY)
+		
+		Call RoundIt(x1, y1, roundFormat)
+		Call RoundIt(x2, y2, roundFormat)
+		
+		Alter Object o Geography OBJ_GEO_LINEBEGX, x1
+		Alter Object o Geography OBJ_GEO_LINEBEGY, y1
+		Alter Object o Geography OBJ_GEO_LINEENDX, x2
+		Alter Object o Geography OBJ_GEO_LINEENDY, y2
+	ElseIf oType = OBJ_TYPE_PLINE Or oType = OBJ_TYPE_REGION Then
+		polyCount = ObjectInfo(o, OBJ_INFO_NPOLYGONS)
+		
+		For i = 1 To polyCount
+			nodeCount = ObjectInfo(o, OBJ_INFO_NPOLYGONS + i)
+			
+			For j = 1 To nodeCount
+				x1 = ObjectNodeX(o, i, j)
+				y1 = ObjectNodeY(o, i, j)
+				
+				Call RoundIt(x1, y1, roundFormat)
+				
+				Alter Object o Node Set Position i, j (x1, y1)
+			Next
+		Next
+	ElseIf oType = OBJ_TYPE_COLLECTION Or oType = OBJ_TYPE_MPOINT Then
+		If Not IsTableOpen(baseTable) Then
+			Call LogMsg(LOG_LEVEL_ERROR, "RoundObjectNodes(...): base table """
+				+ baseTable + """ is not open")
+		Else
+			tmpTableFile1 = GetTempTableName()
+			tmpTableName1 = PathToNameNoExt(GetTempTableName())
+			tmpTableFile2 = GetTempTableName()
+			tmpTableName2 = PathToNameNoExt(GetTempTableName())
+			i = 1
+			
+			Set CoordSys Table baseTable
+			
+			Create Table tmpTableName1 (dummy Char(1)) File tmpTableFile1
+			Create Map For tmpTableName1 Using baseTable
+			Insert Into tmpTableName1 (obj) Values (o)
+			
+			Create Table tmpTableName2 Using baseTable File tmpTableFile2
+			Create Map For tmpTableName2 Using baseTable
+			
+			Select * From tmpTableName1
+			
+			If oType = OBJ_TYPE_COLLECTION Then
+				Objects Disaggregate Into Table tmpTableName2 Collection
+			ElseIf oType = OBJ_TYPE_MPOINT Then
+				Objects Disaggregate Into Table tmpTableName2
+			End If
+			
+			Fetch First From tmpTableName2
+			
+			Do While Not EOT(tmpTableName2)
+				Select obj From tmpTableName2 Where RowID=i Into tmpGrabTable Noselect
+				Fetch First From tmpGrabTable
+				
+				tmpObj = tmpGrabTable.obj
+				
+				Close Table tmpGrabTable
+				
+				If Not RoundObjectNodes(tmpObj, roundFormat) Then  ' Recursive call.
+					Call LogMsg(LOG_LEVEL_ERROR,
+						"RoundObjectNodes(...): unable to round the object in recursive call")
+				Else
+					Update tmpTableName2 Set obj=tmpObj Where RowID=i
+				End If
+				
+				Fetch Next From tmpTableName2
+				
+				Call Inc(i)
+			Loop
+			
+			Select * From tmpTableName2
+			
+			If Not CombineSelection(o) Then
+				Call LogMsg(LOG_LEVEL_ERROR, "Unable to combine objects after rounding")
+			End If
+			
+			Drop Table tmpTableName2
+			Drop Table tmpTableName1
+		End If
+	Else
+		res = FALSE
+	End If
+	
+	RoundObjectNodes = res
+End Function
+
+
+Function CreateRegionFromPoints(points As PointList, ByVal swapXY As Logical) As Object
+	Dim res As Object
+	Dim i, size As Integer
+	Dim tmpP As Point2D
+	
+	size = PointListGetSize(points)
+	
+	If size > 0 Then
+		Create Region Into Variable res 0
+		
+		For i = 1 To size
+			Call PointListGet(points, i, tmpP)
+
+			If swapXY Then Call SwapF(tmpP.x, tmpP.y) End If
+
+			Alter Object res Node Add (tmpP.x, tmpP.y)
+		Next
+	End If
+	
+	CreateRegionFromPoints = res
+End Function
+
+
+Function CreateRegionFromObj(o As Obj, ByVal swapXY As Logical) As Object
+	Dim res As Object
+	Dim i, j, pointCount, islandCount As Integer
+	Dim x, y As Float
+	Dim tmpP As Point2D
+	
+	pointCount = PointListGetSize(o.main.nodes)
+	
+	If pointCount > 0 Then
+		Create Region Into Variable res 0
+		
+		For i = 1 To pointCount
+			Call PointListGet(o.main.nodes, i, tmpP)
+			
+			x = tmpP.x
+			y = tmpP.y
+			
+			If swapXY Then Call SwapF(x, y) End If
+			
+			Alter Object res Node Add Position 1, i (x, y)
+		Next
+		
+		islandCount = UBound(o.islands)
+		
+		For i = 1 To islandCount
+			pointCount = PointListGetSize(o.islands(i).nodes)
+			
+			For j = 1 To pointCount
+				Call PointListGet(o.islands(i).nodes, j, tmpP)
+				
+				x = tmpP.x
+				y = tmpP.y
+				
+				If swapXY Then Call SwapF(x, y) End If
+				
+				Alter Object res Node Add Position i + 1, j (x, y)
+			Next
+		Next
+	End If
+	
+	CreateRegionFromObj = res
+End Function
+
+
+Function GetLineLength(l As Object) As Float
+	Dim res As Float
+	Dim oType As SmallInt
+	Dim i, size As Integer
+	
+	res = -1
+	oType = ObjectInfo(l, OBJ_INFO_TYPE)
+	
+	If Not IsObjectEmpty(l)
+			And (oType = OBJ_TYPE_LINE Or oType = OBJ_TYPE_PLINE) Then
+		If oType = OBJ_TYPE_LINE Then
+			res = Distance(ObjectGeography(l, OBJ_GEO_LINEBEGX),
+				ObjectGeography(l, OBJ_GEO_LINEBEGY),
+				ObjectGeography(l, OBJ_GEO_LINEENDX),
+				ObjectGeography(l, OBJ_GEO_LINEENDX),
+				"m")
+		ElseIf oType = OBJ_TYPE_PLINE Then
+			size = ObjectInfo(l, OBJ_INFO_NPNTS)
+			
+			For i = 2 To size
+				res = res + Distance(ObjectNodeX(l, 1, i - 1),
+					ObjectNodeY(l, 1, i - 1),
+					ObjectNodeX(l, 1, i),
+					ObjectNodeY(l, 1, i),
+					"m")
+			Next
+		End If
+	End If
+	
+	GetLineLength = res
+End Function
+
+
+Sub PrintMPLine(mpline As MPLine)
+	Dim i, j, size1, size2 As Integer
+
+	size1 = UBound(mpline.plines)
+
+	For i = 1 To size1
+		Print "PLine: " + i
+
+		size2 = UBound(mpline.plines(i).nodes)
+
+		For j = 1 To size2
+			Print "Point " + j + ": " + Point2DToString(mpline.plines(i).nodes(j))
+		Next
+	Next
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Get index of Obj structure's point that is the nearest to one specified
+' in "order" parameter.
+'
+' This "order" point can be one of 8 points:
+'	* North-West
+'	* North
+'	* North-East
+'	* East
+'	* etc.
+'
+Sub GetBoundPoint(nodes As PointList, ByVal order As Integer, p As Point2D, idx As Integer)
+	Dim i, pointCount As Integer
+	Dim boundX, boundY, d1, d2 As Float
+	Dim boundNWPoint, tmpP As Point2D
+	
+	pointCount = PointListGetSize(nodes)
+	idx = 1
+
+	Call PointListGet(nodes, idx, tmpP)
+
+	boundX = tmpP.x
+	boundY = tmpP.y
+	
+	' Find boundary rectangle's point.
+	For i = 2 To pointCount
+		Call PointListGet(nodes, i, tmpP)
+
+		If order = ORDER_NW Or order = ORDER_NE Or order = ORDER_SE Or order = ORDER_SW Then
+			If (order = ORDER_NW And tmpP.x < boundX)
+					Or (order = ORDER_NE And tmpP.x > boundX)
+					Or (order = ORDER_SE And tmpP.x > boundX)
+					Or (order = ORDER_SW And tmpP.x < boundX) Then
+				boundX = tmpP.x
+			End If
+			
+			If (order = ORDER_NW And tmpP.y > boundY)
+					Or (order = ORDER_NE And tmpP.y > boundY)
+					Or (order = ORDER_SE And tmpP.y < boundY)
+					Or (order = ORDER_SW And tmpP.y < boundY) Then
+				boundY = tmpP.y
+			End If
+		Else
+			If order = ORDER_W Or order = ORDER_E Then
+				If (order = ORDER_W And tmpP.x < boundX)
+						Or (order = ORDER_E And tmpP.x > boundX) Then
+					boundX = tmpP.x
+				End If
+				
+				boundY = boundY + tmpP.y
+				
+				If i = pointCount Then
+					boundY = boundY / pointCount
+				End If
+			End If
+			
+			If order = ORDER_N Or order = ORDER_S Then
+				If (order = ORDER_N And tmpP.y > boundY)
+						Or (order = ORDER_S And tmpP.y < boundY) Then
+					boundY = tmpP.y
+				End If
+				
+				boundX = boundX + tmpP.x
+				
+				If i = pointCount Then
+					boundX = boundX / pointCount
+				End If
+			End If
+		End If
+	Next
+	
+	pointCount = PointListGetSize(nodes)
+	
+	Call CreatePoint2D(boundNWPoint, boundX, boundY)
+	
+	' Search among object points for the nearest to the bound's point.
+	For i = 1 To pointCount
+		Call PointListGet(nodes, i, tmpP)
+
+		If i = 1 Then d1 = Distance(boundX, boundY, tmpP.x, tmpP.y, "m")
+		Else
+			d2 = Distance(boundX, boundY, tmpP.x, tmpP.y, "m")
+			
+			If d2 < d1 Then
+				d1 = d2
+				idx = i
+			End If
+		End If
+	Next
+	
+	Call PointListGet(nodes, idx, p)
+End Sub
+
+
+Sub RoundIt(x As Float, y As Float, ByVal roundFormat As Float)
+	x = Round(x, roundFormat)
+	y = Round(y, roundFormat)
+End Sub
+
+
+'
+' Calculate and set polygon's centroid as an average of its X and Y coordinates.
+'
+Sub CalcPolygonCentroid(poly As Polygon)
+	Dim i, size As Integer
+	Dim mx, my As Float
+	Dim tmpP As Point2D
+	
+	size = PointListGetSize(poly.nodes)
+	
+	For i = 1 To size
+		Call PointListGet(poly.nodes, i, tmpP)
+
+		mx = mx + tmpP.x
+		my = my + tmpP.y
+	Next
+	
+	poly.centroid.x = mx / size
+	poly.centroid.y = my / size
+End Sub
+
+
+Sub ReorderIslands(islands() As Polygon, p As Point2D)
+	Dim i, size, idx As Integer
+	Dim d As Float
+	Dim idx2dMap As HashTable
+	Dim ordered() As Polygon
+	Dim keys() As String
+	
+	size = UBound(islands)
+	
+	ReDim ordered(size)
+	
+	For i = 1 To size
+		d = GetDistanceBetweenPoints2D(p, islands(i).centroid)
+		
+		Call HashTableAddBlind(idx2dMap, i, d)
+	Next
+	
+	Call HashTableSortAsNumber(idx2dMap, TRUE, TRUE)
+	Call HashTableGetKeys(idx2dMap, keys)
+	
+	' Order according to distance. Place into temporary array.
+	For i = 1 To size
+		idx = StrToInt(keys(i))
+		
+		Call PointListCopy(islands(idx).nodes, ordered(i).nodes)
+		Call CopyPoint2D(islands(idx).centroid, ordered(i).centroid)
+	Next
+	
+	' Copy results back.
+	For i = 1 To size
+		Call PointListCopy(ordered(i).nodes, islands(i).nodes)
+		Call CopyPoint2D(ordered(i).centroid, islands(i).centroid)
+	Next
+End Sub
+
+
+'
+' See ORDER_ constants in *.def file.
+' Inversion means X and Y swap.
+'
+Function InvertOrder(ByVal order As SmallInt) As SmallInt
+	If order = ORDER_NW Then
+		order = ORDER_SE
+	ElseIf order = ORDER_N Then
+		order = ORDER_E
+	ElseIf order = ORDER_NE Then
+		'order = ORDER_
+	ElseIf order = ORDER_E Then
+		order = ORDER_N
+	ElseIf order = ORDER_SE Then
+		order = ORDER_NW
+	ElseIf order = ORDER_S Then
+		order = ORDER_W
+	ElseIf order = ORDER_SW Then
+		'order = ORDER_
+	ElseIf order = ORDER_W Then
+		order = ORDER_S
+	End If
+	
+	InvertOrder = order
+End Function
+
+
+'
+' Create object from all others in given tables.
+'
+Function ObjectFromTables(tables() As String, ByVal whereClause As String) As Object
+	Dim res, tmp As Object
+	Dim i, size As Integer
+	Dim tempTableFile As String
+	Dim useClause As Logical
+	
+	size = UBound(tables)
+	useClause = (Len(whereClause) > 0)
+	
+	If size > 0 Then
+		tempTableFile = GetTempTableName()
+		
+		Create Region Into Variable res 0
+		Create Table tmpBufTable (t SmallInt) File tempTableFile
+		Create Map For tmpBufTable Using tables(1)
+		
+		For i = 1 To size
+			If useClause Then
+				Run Command "Select ObjectInfo(obj, " + OBJ_INFO_TYPE + "), obj"
+					+ " From " + tables(i)
+					+ " Where " + whereClause
+					+ " Into tmpFilteredTable Noselect"
+			Else
+				Select ObjectInfo(obj, OBJ_INFO_TYPE), obj
+					From tables(i)
+					Into tmpFilteredTable Noselect
+			End If
+			
+			Insert Into tmpBufTable (t, obj) Select * From tmpFilteredTable
+			Close Table tmpFilteredTable
+		Next
+		
+		Select * From tmpBufTable Where t = OBJ_TYPE_REGION
+		
+		If SelectionInfo(SEL_INFO_NROWS) > 0 Then
+			If Not CombineSelection(res) Then
+				Call LogMsg(LOG_LEVEL_WARN, "Unable to combine selection")
+			End If
+		End If
+		
+		Drop Table tmpBufTable
+	End If
+	
+	ObjectFromTables = res
+End Function
+
+
+Sub GetCentroid(arr() As Point2D, p As Point2D)
+	Dim i, size As Integer
+		size = UBound(arr)
+
+	For i = 1 To size
+		p.x = p.x + arr(i).x
+		p.y = p.y + arr(i).y
+	Next
+
+	p.x = p.x / size
+	p.y = p.y / size
+End Sub
+
+
+Function PointIntersectsObject(ByVal x As Float, ByVal y As Float, o As Object, ByVal delta As Float) As Logical
+	Dim res As Logical
+	Dim testR, resObj As Object
+	
+	If delta > 0 Then
+		Create Region Into Variable testR 0
+		Alter Object testR Node Add (x - delta, y - delta)
+		Alter Object testR Node Add (x - delta, y + delta)
+		Alter Object testR Node Add (x + delta, y + delta)
+		Alter Object testR Node Add (x + delta, y - delta)
+
+		resObj = IntersectNodes(o, testR, INCL_ALL)
+		res = ObjectInfo(resObj, OBJ_INFO_NPOLYGONS) > 0
+	End If
+
+	PointIntersectsObject = res
+End Function

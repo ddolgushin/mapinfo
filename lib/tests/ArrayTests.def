@@ -1,0 +1,5 @@
+Declare Function TestArrayContainsSubset() As String
+Declare Function TestArraySubtract() As String
+Declare Function TestArrayIntersect() As String
+Declare Function TestArrayAdd() As String
+Declare Function TestArrayUnique() As String

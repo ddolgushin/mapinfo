@@ -1,0 +1,731 @@
+Include "Array.def"
+Include "Util.def"
+Include "mapbasic.def"
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+' ADD ROUTINES
+
+
+Sub AddFloatToArray(arr() As Float, ByVal v As Float)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	arr(size) = v
+End Sub
+
+
+Sub AddIntToArray(arr() As Integer, ByVal v As Integer)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	arr(size) = v
+End Sub
+
+
+Sub AddIntToArrayHead(arr() As Integer, ByVal v As Integer)
+	Dim i, size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	For i = size To 2 Step -1
+		arr(i) = arr(i - 1)
+	Next
+	
+	arr(1) = v
+End Sub
+
+
+Sub AddLogicalToArray(arr() As Logical, ByVal v As Logical)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	arr(size) = v
+End Sub
+
+
+Sub AddLogicalToArrayHead(arr() As Logical, ByVal v As Logical)
+	Dim i, size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	For i = size To 2 Step -1
+		arr(i) = arr(i - 1)
+	Next
+	
+	arr(1) = v
+End Sub
+
+
+Sub AddSmallIntToArray(arr() As SmallInt, ByVal v As SmallInt)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	arr(size) = v
+End Sub
+
+
+Sub AddSmallIntToArrayHead(arr() As SmallInt, ByVal v As SmallInt)
+	Dim i, size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	For i = size To 2 Step -1
+		arr(i) = arr(i - 1)
+	Next
+	
+	arr(1) = v
+End Sub
+
+
+Sub AddStringToArray(arr() As String, ByVal v As String)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	arr(size) = v
+End Sub
+
+
+Sub AddStringToArrayHead(arr() As String, ByVal v As String)
+	Dim i, size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	For i = size To 2 Step -1
+		arr(i) = arr(i - 1)
+	Next
+	
+	arr(1) = v
+End Sub
+
+
+Sub AddObjectToArray(arr() As Object, ByVal v As Object)
+	Dim size As Integer
+	
+	size = UBound(arr) + 1
+	
+	ReDim arr(size)
+	
+	arr(size) = v
+End Sub
+
+
+' DELETE ROUTINES
+
+
+Sub DelStringFromArray(arr() As String, ByVal idx As Integer)
+	Dim tmp() As String
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If idx > 0 And idx <= size Then
+		For i = 1 To size
+			If i <> idx Then
+				Call AddStringToArray(tmp, arr(i))
+			End If
+		Next
+		
+		Call CopyStringArray(tmp, arr)
+	End If
+End Sub
+
+
+Sub DelFloatFromArray(arr() As Float, ByVal idx As Integer)
+	Dim tmp() As Float
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If idx > 0 And idx <= size Then
+		For i = 1 To size
+			If i <> idx Then
+				Call AddFloatToArray(tmp, arr(i))
+			End If
+		Next
+		
+		Call CopyFloatArray(tmp, arr)
+	End If
+End Sub
+
+
+Sub DelIntFromArray(arr() As Integer, ByVal idx As Integer)
+	Dim tmp() As Integer
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If idx > 0 And idx <= size Then
+		For i = 1 To size
+			If i <> idx Then
+				Call AddIntToArray(tmp, arr(i))
+			End If
+		Next
+		
+		Call CopyIntArray(tmp, arr)
+	End If
+End Sub
+
+
+Sub DelSmallIntFromArray(arr() As SmallInt, ByVal idx As Integer)
+	Dim tmp() As SmallInt
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If idx > 0 And idx <= size Then
+		For i = 1 To size
+			If i <> idx Then
+				Call AddSmallIntToArray(tmp, arr(i))
+			End If
+		Next
+		
+		Call CopySmallIntArray(tmp, arr)
+	End If
+End Sub
+
+
+Sub DelLogicalFromArray(arr() As Logical, ByVal idx As Integer)
+	Dim tmp() As Logical
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If idx > 0 And idx <= size Then
+		For i = 1 To size
+			If i <> idx Then
+				Call AddLogicalToArray(tmp, arr(i))
+			End If
+		Next
+		
+		Call CopyLogicalArray(tmp, arr)
+	End If
+End Sub
+
+
+Sub DelObjectFromArray(arr() As Object, ByVal idx As Integer)
+	Dim tmp() As Object
+	Dim i, size As Integer
+	
+	size = UBound(arr)
+	
+	If idx > 0 And idx <= size Then
+		For i = 1 To size
+			If i <> idx Then
+				Call AddObjectToArray(tmp, arr(i))
+			End If
+		Next
+		
+		Call CopyObjectArray(tmp, arr)
+	End If
+End Sub
+
+
+' COPY ROUTINES
+
+
+Sub CopyStringArray(arrSrc() As String, arrDst() As String)
+	Dim count, i As Integer
+	
+	count = UBound(arrSrc)
+	
+	ReDim arrDst(count)
+	
+	For i = 1 To count
+		arrDst(i) = arrSrc(i)
+	Next
+End Sub
+
+
+Sub CopyFloatArray(arrSrc() As Float, arrDst() As Float)
+	Dim count, i As Integer
+	
+	count = UBound(arrSrc)
+	
+	ReDim arrDst(count)
+	
+	For i = 1 To count
+		arrDst(i) = arrSrc(i)
+	Next
+End Sub
+
+
+Sub CopyIntArray(arrSrc() As Integer, arrDst() As Integer)
+	Dim count, i As Integer
+	
+	count = UBound(arrSrc)
+	
+	ReDim arrDst(count)
+	
+	For i = 1 To count
+		arrDst(i) = arrSrc(i)
+	Next
+End Sub
+
+
+Sub CopySmallIntArray(arrSrc() As SmallInt, arrDst() As SmallInt)
+	Dim count, i As Integer
+	
+	count = UBound(arrSrc)
+	
+	ReDim arrDst(count)
+	
+	For i = 1 To count
+		arrDst(i) = arrSrc(i)
+	Next
+End Sub
+
+
+Sub CopyLogicalArray(arrSrc() As Logical, arrDst() As Logical)
+	Dim count, i As Integer
+	
+	count = UBound(arrSrc)
+	
+	ReDim arrDst(count)
+	
+	For i = 1 To count
+		arrDst(i) = arrSrc(i)
+	Next
+End Sub
+
+
+Sub CopyObjectArray(arrSrc() As Object, arrDst() As Object)
+	Dim count, i As Integer
+	
+	count = UBound(arrSrc)
+	
+	ReDim arrDst(count)
+	
+	For i = 1 To count
+		arrDst(i) = arrSrc(i)
+	Next
+End Sub
+
+
+' SEARCH ROUTINES
+
+
+Function ArraySearchString(arr() As String, ByVal v As String) As Integer
+	Dim res As Integer
+	Dim size, i As Integer
+	
+	size = UBound(arr)
+	res = -1
+	
+	If size > 0 Then
+		For i = 1 To size
+			If StringCompare(v, arr(i)) = 0 Then
+				res = i
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	ArraySearchString = res
+End Function
+
+
+Function ArraySearchStringI(arr() As String, ByVal v As String) As Integer
+	Dim res As Integer
+	Dim size, i As Integer
+	
+	size = UBound(arr)
+	res = -1
+	
+	If size > 0 Then
+		For i = 1 To size
+			If LCase$(v) = LCase$(arr(i)) Then
+				res = i
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	ArraySearchStringI = res
+End Function
+
+
+Function ArraySearchStringStartingWithI(arr() As String, ByVal v As String) As Integer
+	Dim res, i, size As Integer
+
+	size = UBound(arr)
+
+	For i = 1 To size
+		If StartsWith(arr(i), v) Then
+			res = i
+
+			Exit For
+		End If
+	Next
+
+	ArraySearchStringStartingWithI = res
+End Function
+
+
+Function ArraySearchInt(arr() As Integer, ByVal v As Integer) As Integer
+	Dim res As Integer
+	Dim size, i As Integer
+	
+	size = UBound(arr)
+	res = -1
+	
+	If size > 0 Then
+		For i = 1 To size
+			If v = arr(i) Then
+				res = i
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	ArraySearchInt = res
+End Function
+
+
+Function ArraySearchFloat(arr() As Float, ByVal v As Float) As Integer
+	Dim res As Integer
+	Dim size, i As Integer
+	
+	size = UBound(arr)
+	res = -1
+	
+	If size > 0 Then
+		For i = 1 To size
+			If v = arr(i) Then
+				res = i
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	ArraySearchFloat = res
+End Function
+
+
+'
+' Compare two string arrays. Order plays no role as they are sorted
+' before comparison.
+'
+' TRUE if equal.
+'
+Function CompareStringArrays(arr1() As String, arr2() As String) As Logical
+	Dim res As Logical
+	Dim i, size1, size2 As Integer
+	Dim tmpArr1(), tmpArr2() As String
+	
+	size1 = UBound(arr1)
+	size2 = UBound(arr2)
+	res = (size1 = size2)
+	
+	If res Then
+		Call CopyStringArray(arr1, tmpArr1)
+		Call CopyStringArray(arr2, tmpArr2)
+		Call SortStringArray(tmpArr1, FALSE)
+		Call SortStringArray(tmpArr2, FALSE)
+		
+		For i = 1 To size1
+			If Not tmpArr1(i) = tmpArr2(i) Then
+				res = FALSE
+				
+				Exit For
+			End If
+		Next
+	End If
+	
+	CompareStringArrays = res
+End Function
+
+
+'
+' Bulk sort.
+'
+Sub SortStringArray(arr() As String, ByVal reverse As Logical)
+	Call SortStringArrayExt(arr, reverse, FALSE)
+End Sub
+
+
+Sub SortStringArrayExt(arr() As String, ByVal reverse As Logical,
+		ByVal treatAsNumber As Logical)
+	Dim done As Logical
+	Dim i, size, idx1, idx2 As Integer
+	Dim tmpStr As String
+	Dim expectedRes As SmallInt
+	Dim tmpVal1, tmpVal2 As Float
+	
+	size = UBound(arr)
+	
+	If reverse Then
+		expectedRes = -1
+	Else
+		expectedRes = 1
+	End If
+	
+	If size > 1 Then
+		Do While Not done
+			done = TRUE
+			
+			For i = 2 To size
+				If treatAsNumber Then
+					tmpVal1 = StrToFloat(arr(i - 1))
+					tmpVal2 = StrToFloat(arr(i))
+					
+					If (reverse And tmpVal1 < tmpVal2)
+							Or (Not reverse And tmpVal1 > tmpVal2) Then
+						arr(i - 1) = tmpVal2
+						arr(i) = tmpVal1
+					End If
+				Else
+					If StringCompare(arr(i - 1), arr(i)) = expectedRes Then
+						tmpStr = arr(i - 1)
+						arr(i - 1) = arr(i)
+						arr(i) = tmpStr
+						done = FALSE
+					End If
+				End If
+			Next
+		Loop
+	End If
+End Sub
+
+
+'
+' Count all occurences of given string in array.
+' NOTE: case sensitive.
+'
+Function ArrayCountString(arr() As String, ByVal v As String)
+		As Integer
+	Dim i, size, res As Integer
+	
+	size = UBound(arr)
+	v = Trim(v)
+	
+	If size > 0 And Len(v) > 0 Then
+		For i = 1 To size
+			If StringCompare(arr(i), v) = 0 Then
+				res = res + 1
+			End If
+		Next
+	End If
+	
+	ArrayCountString = res
+End Function
+
+
+'
+' Check if arr2 is a subset of arr2.
+'
+Function ArrayContainsSubset(arr1() As String, arr2() As String) As Logical
+	ArrayContainsSubset = ArrayContainsSubsetExt(arr1, arr2, FALSE)
+End Function
+
+
+Function ArrayContainsSubsetExt(arr1() As String, arr2() As String,
+		ByVal ignoreCase As Logical) As Logical
+	Dim i, j, size1, size2 As Integer
+	Dim res As Logical
+	
+	size1 = UBound(arr1)
+	size2 = UBound(arr2)
+	
+	If size1 > 0 And size2 <= size1 Then
+		' Empty set is a subset of any set.
+		If size1 > 0 And size2 = 0 Then
+			res = TRUE
+		Else
+			For i = 1 To size2
+				res = FALSE
+				
+				For j = 1 To size1
+					If (ignoreCase And arr2(i) = arr1(j))
+							Or (Not ignoreCase And StringCompare(arr2(i), arr1(j)) = 0) Then
+						res = TRUE
+						
+						Exit For
+					End If
+				Next
+				
+				If Not res Then
+					Exit For
+				End If
+			Next
+		End If
+	End If
+	
+	ArrayContainsSubsetExt = res
+End Function
+
+
+'
+' Subtract arr2 from arr1 and place the result into arrRes.
+'
+' NOTE:
+'   1. Case sensitive.
+'   2. Given array and arrRes can be the same array.
+'
+Function ArraySubtract(arr1() As String, arr2() As String, arrRes() As String) As Integer
+	Dim res, i, j, size1, size2 As Integer
+	Dim exists As Logical
+	Dim tmpArr() As String
+	
+	size1 = UBound(arr1)
+	size2 = UBound(arr2)
+	
+	For i = 1 To size1
+		exists = FALSE
+		
+		For j = 1 To size2
+			If StringCompare(arr1(i), arr2(j)) = 0 Then
+				exists = TRUE
+				
+				Exit For
+			End If
+		Next
+		
+		If Not exists Then
+			Call AddStringToArray(tmpArr, arr1(i))
+		End If
+	Next
+	
+	Call CopyStringArray(tmpArr, arrRes)
+	
+	ArraySubtract = UBound(arrRes)
+End Function
+
+
+'
+' Intersect two arrays, place result into arrRes.
+'
+' NOTE:
+'   0. Dubs allowed.
+'   1. Case sensitive.
+'   2. Given array and arrRes can be the same array.
+'
+Function ArrayIntersect(arr1() As String, arr2() As String, arrRes() As String) As Integer
+	ArrayIntersect = ArrayIntersectExt(arr1, arr2, arrRes, FALSE)
+End Function
+
+
+Function ArrayIntersectExt(arr1() As String, arr2() As String,
+		arrRes() As String, ByVal ignoreCase As Logical) As Integer
+	Dim i, j, size1, size2 As Integer
+	Dim tmpArr() As String
+	
+	size1 = UBound(arr1)
+	size2 = UBound(arr2)
+	
+	For i = 1 To size1
+		For j = 1 To size2
+			If (ignoreCase And arr1(i) = arr2(j))
+					Or (Not ignoreCase And StringCompare(arr1(i), arr2(j)) = 0) Then
+				Call AddStringToArray(tmpArr, arr1(i))
+			End If
+		Next
+	Next
+	
+	Call CopyStringArray(tmpArr, arrRes)
+	
+	ArrayIntersectExt = UBound(arrRes)
+End Function
+
+
+'
+' Remove dubs from array.
+'
+' NOTE:
+'   1. Case sensitive.
+'   2. Given array and arrRes can be the same array.
+'
+Function ArrayUnique(arr() As String, arrRes() As String) As Integer
+	ArrayUnique = ArrayUniqueExt(arr, arrRes, TRUE)
+End Function
+
+
+Function ArrayUniqueExt(arr() As String, arrRes() As String,
+		ByVal sort As Logical) As Integer
+	Dim i, j, size As Integer
+	Dim hasDub As Logical
+	Dim tmpArr() As String
+	
+	size = UBound(arr)
+	
+	If sort Then Call SortStringArray(arr, FALSE) End If
+	
+	For i = 1 To size
+		hasDub = FALSE
+		
+		For j = i + 1 To size
+			If StringCompare(arr(i), arr(j)) = 0 Then
+				hasDub = TRUE
+				
+				Exit For
+			End If
+		Next
+		
+		If Not hasDub Then
+			Call AddStringToArray(tmpArr, arr(i))
+		End If
+	Next
+	
+	Call CopyStringArray(tmpArr, arrRes)
+	
+	ArrayUniqueExt = UBound(arrRes)
+End Function
+
+
+'
+' Add two arrays, place result into arrRes.
+'
+' NOTE:
+'   0. Dubs allowed.
+'   1. Case sensitive.
+'   2. Given array and arrRes can be the same array.
+'
+Function ArrayAdd(arr1() As String, arr2() As String, arrRes() As String) As Integer
+	Dim i, size As Integer
+	Dim tmpArr() As String
+	
+	size = UBound(arr2)
+	
+	Call CopyStringArray(arr1, tmpArr)
+	
+	For i = 1 To size
+		Call AddStringToArray(tmpArr, arr2(i))
+	Next
+	
+	Call CopyStringArray(tmpArr, arrRes)
+	
+	ArrayAdd = UBound(arrRes)
+End Function

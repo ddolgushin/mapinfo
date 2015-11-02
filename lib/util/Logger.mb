@@ -1,0 +1,209 @@
+Include "Logger.def"
+Include "File.def"
+
+
+Declare Sub ReleaseFile()
+Declare Sub InitLogger(ByVal level As Integer, ByVal mode As Integer,
+			ByVal outputFile As String)
+
+Declare Function CheckLogLevel(ByVal level As Integer) As Logical
+Declare Function CheckLogMode(ByVal mode As Integer) As Logical
+Declare Function GetLogLevelName(ByVal level As Integer) As String
+
+
+Global gl_logLevel As Integer
+Global gl_logMode As INteger
+Global gl_logFile As String
+Global gl_logFileId As Integer
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub InitMsgWinLogger(ByVal level As Integer)
+	Call InitLogger(level, LOG_MODE_MSGWIN, "")
+End Sub
+
+
+Sub InitFileLogger(ByVal level As Integer, ByVal outputFile As String)
+	Call InitLogger(level, LOG_MODE_FILE, outputFile)
+End Sub
+
+
+'
+' Initializes logger with level, mode and, if mode is file, with name
+' of output file.
+'
+' If it is unable to opern file for write, switch to message window output.
+'
+Sub InitLogger(ByVal level As Integer, ByVal mode As Integer,
+		ByVal outputFile As String)
+	If Not CheckLogLevel(level) Then
+		Note "Invalid log level given. Default one will be used (DEBUG)."
+		
+		gl_logLevel = DEFAULT_LOG_LEVEL
+	Else
+		gl_logLevel = level
+	End If
+	
+	If Not CheckLogMode(mode) Then
+		Note "Invalid log mode given. Default one will be used (MSGWIN)."
+		
+		gl_logMode = DEFAULT_LOG_MODE
+	Else
+		gl_logMode = mode
+	End If
+	
+	If gl_logMode = LOG_MODE_FILE Then
+		OnError GoTo fail
+			If Not (Len(outputFile) > 0
+					And FileExistsExt(PathToDirectory$(outputFile))) Then
+				gl_logFile = ApplicationDirectory$() + DEFAULT_LOG_FILENAME
+				
+				Note "Invalid log file name provided: """ + outputFile + """."
+					+ Chr$(13) + "Will be used: """ + gl_logFile + """."
+			Else
+				gl_logFile = outputFile
+			End If
+			
+			gl_logFileId = OpenFile(gl_logFile, FMODE_APPEND)
+			
+			GoTo okee
+fail:
+		Note "File """ + outputFile
+			+ """ is occupied by another application."
+			+ " Message window output will be used"
+		
+		gl_logFileId = 0
+		gl_logMode = LOG_MODE_MSGWIN
+	End If
+okee:
+	If gl_logMode = LOG_MODE_MSGWIN Then
+		Print Chr$(12)
+	End If
+
+	OnError GoTo 0
+End Sub
+
+
+'
+' Free occupied file resource in case of file logger.
+'
+Sub ShutdownLogger()
+	Call ReleaseFile()
+End Sub
+
+
+'
+' Set level to filter log messages.
+'
+Sub SetLogLevel(ByVal level As Integer)
+	If CheckLogLevel(level) Then
+		gl_logLevel = level
+	End If
+End Sub
+
+
+'
+' Log message at given level with prepending date-time string.
+'
+Sub LogMsg(ByVal level As Integer, ByVal msg As String)
+	If CheckLogLevel(level) And level >= gl_logLevel And Len(msg) > 0 Then
+		msg = "[" + Str$(CurDate()) + " " + Time(24)
+			+ " - " + GetLogLevelName(level) + "] " + msg
+		
+		Call LogMsgUnformatted(level, msg)
+	End If
+End Sub
+
+
+'
+' Log message without prepending date-time string.
+'
+Sub LogMsgUnformatted(ByVal level As Integer, ByVal msg As String)
+	If CheckLogLevel(level) And level >= gl_logLevel Then
+		If gl_logMode = LOG_MODE_MSGWIN Then
+			Print msg
+		ElseIf gl_logMode = LOG_MODE_FILE Then
+			Print # gl_logFileId, msg
+		End If
+	End If
+End Sub
+
+
+'
+' Get current log level.
+'
+Function GetLogLevel() As SmallInt
+	GetLogLevel = gl_logLevel
+End Function
+
+
+'
+' Get current log mode.
+'
+Function GetLogMode() As SmallInt 
+	GetLogMode = gl_logMode
+End Function
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Close file, if in file log mode and file handler is more than 0.
+'
+Sub ReleaseFile()
+	If gl_logMode = LOG_MODE_FILE And gl_logFileId > 0
+			And FileExistsExt(gl_logFile) Then
+		Call CloseFile(gl_logFileId)
+	End If
+End Sub
+
+
+'
+' Check if log given log level is correct.
+'
+Function CheckLogLevel(ByVal level As Integer) As Logical
+	CheckLogLevel = level >= LOG_LEVEL_DEBUG And level <= LOG_LEVEL_FATAL
+End Function
+
+
+'
+' Check if given log mode is correct.
+'
+Function CheckLogMode(ByVal mode As Integer) As Logical
+	CheckLogMode = (mode = LOG_MODE_MSGWIN) Or (mode = LOG_MODE_FILE)
+End Function
+
+
+'
+' Provide readable name for log level.
+'
+Function GetLogLevelName(ByVal level As Integer) As String
+	Dim res As String
+	
+	If CheckLogLevel(level) Then
+		If level = LOG_LEVEL_DEBUG Then
+			res = "DEBUG"
+		ElseIf level = LOG_LEVEL_INFO Then
+			res = "INFO"
+		ElseIf level = LOG_LEVEL_WARN Then
+			res = "WARN"
+		ElseIf level = LOG_LEVEL_ERROR Then
+			res = "ERROR"
+		ElseIf level = LOG_LEVEL_FATAL Then
+			res = "FATAL"
+		End If
+	End If
+	
+	GetLogLevelName = res
+End Function

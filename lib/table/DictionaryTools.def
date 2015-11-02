@@ -1,0 +1,19 @@
+Include "../util/HashTable.def"
+
+
+Declare Sub FillDictionary(ByVal tableName As String, ByVal field1 As String,
+	ByVal field2 As String, ByVal order As Logical, ByVal orderFieldName As String,
+	ht As HashTable)
+Declare Sub FillDictionaryEx(ByVal tableName As String, ByVal field1 As String,
+	ByVal field2 As String, ByVal order As Logical, ByVal orderFieldName As String,
+	ht As HashTable, ByVal noDubs As Logical, ByVal semicolonRepl As String)
+Declare Sub SliceByField(ByVal tableName As String, ByVal fieldName As String, ByVal order As Logical, values() As String)
+Declare Sub SliceByFields(ByVal tableName As String, fieldNames() As String, ByVal delim As String,
+	orderFields() As String, values() As String)
+
+Declare Function ReplaceFieldByDictionary(ByVal tableName As String, ByVal fieldName As String, ht As HashTable) As Integer
+
+Declare Function DictionaryCodeToNum(ByVal code As String, ByVal dictTable As String) As Integer
+Declare Function DictionaryCodeToValue(ByVal code As String, ByVal dictTable As String) As String
+Declare Function DictionaryNumToCode(ByVal num As Integer, ByVal dictTable As String, ByVal skipFirst As Logical) As String
+Declare Function DictionaryNumToValue(ByVal num As Integer, ByVal dictTable As String, ByVal skipFirst As Logical) As String

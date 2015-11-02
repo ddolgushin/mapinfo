@@ -1,0 +1,287 @@
+Include "mapbasic.def"
+Include "List.def"
+Include "Array.def"
+Include "Logger.def"
+
+
+Declare Sub PointListSetSize(list As PointList, ByVal size As Integer)
+Declare Sub PointListSet(list As PointList, ByVal idx As Integer, ByVal x As Float, ByVal y As Float)
+
+
+Sub StringListAdd(list As StringList, ByVal v As String)
+	Dim newSize, arrIdx, inArrIdx As Integer
+	
+	newSize = list.size + 1
+	
+	If newSize > LIST_MAX_CAPACITY Then
+		Call LogMsg(LOG_LEVEL_ERROR, "Add item to list - out of capacity."
+			+ " Maximum items available to store: " + LIST_MAX_CAPACITY)
+	Else
+		arrIdx = UBound(list.magazine)
+		
+		If arrIdx = 0 Then arrIdx = 1 End If
+		If newSize / MAX_ARRAY_LENGTH > arrIdx Then
+			arrIdx = Int(newSize / MAX_ARRAY_LENGTH) + 1
+		End If
+		If arrIdx > UBound(list.magazine) Then
+			ReDim list.magazine(arrIdx)
+		End If
+		
+		Call AddStringToArray(list.magazine(arrIdx).items, v)
+		
+		list.size = newSize
+	End If
+End Sub
+
+
+Sub StringListClear(list As StringList)
+	Dim i As Integer
+
+	For i = 1 To UBound(list.magazine)
+		ReDim list.magazine(i).items(0)
+	Next
+
+	ReDim list.magazine(0)
+	
+	list.size = 0
+End Sub
+
+
+Function StringListGet(list As StringList, ByVal idx As Integer) As String
+	Dim res As String
+	Dim arrIdx, inArrIdx As Integer
+	
+	If Not (idx <= list.size And idx > 0) Then
+		Call LogMsg(LOG_LEVEL_ERROR,
+			"Get item from list - index out of bounds: " + idx)
+	Else
+		arrIdx = 1
+		
+		If idx / MAX_ARRAY_LENGTH > arrIdx Then
+			arrIdx = Int(idx / MAX_ARRAY_LENGTH) + 1
+		End If
+		
+		inArrIdx = idx - (arrIdx - 1) * MAX_ARRAY_LENGTH
+		res = list.magazine(arrIdx).items(inArrIdx)
+	End If
+	
+	StringListGet = res
+End Function
+
+
+Function StringListGetSize(list As StringList) As Integer
+	StringListGetSize = list.size
+End Function
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub PointListAdd(list As PointList, v As Point2D)
+	Dim newSize, arrIdx, inArrIdx As Integer
+	
+	newSize = list.size + 1
+	
+	If newSize > LIST_MAX_CAPACITY Then
+		Call LogMsg(LOG_LEVEL_ERROR, "Add item to list - out of capacity."
+			+ " Maximum items available to store: " + LIST_MAX_CAPACITY)
+	Else
+		arrIdx = UBound(list.magazine)
+		
+		If arrIdx = 0 Then arrIdx = 1 End If
+		If newSize / MAX_ARRAY_LENGTH > arrIdx Then
+			arrIdx = Int(newSize / MAX_ARRAY_LENGTH) + 1
+		End If
+		If arrIdx > UBound(list.magazine) Then
+			ReDim list.magazine(arrIdx)
+		End If
+		
+		Call AddPoint2DToArray(list.magazine(arrIdx).items, v)
+		
+		list.size = newSize
+	End If
+End Sub
+
+
+Sub PointListClear(list As PointList)
+	Dim i, size As Integer
+
+	If list.size > 0 Then
+		size = UBound(list.magazine)
+
+		For i = 1 To size
+			ReDim list.magazine(i).items(0)
+		Next
+
+		ReDim list.magazine(0)
+	End If
+
+	list.size = 0
+End Sub
+
+
+Sub PointListGet(list As PointList, ByVal idx As Integer, res As Point2D)
+	Dim arrIdx, inArrIdx As Integer
+	
+	If Not (idx <= list.size And idx > 0) Then
+		Call LogMsg(LOG_LEVEL_ERROR,
+			"Get item from list - index out of bounds: " + idx)
+	Else
+		arrIdx = 1
+		
+		If idx / MAX_ARRAY_LENGTH > arrIdx Then
+			arrIdx = Int(idx / MAX_ARRAY_LENGTH) + 1
+		End If
+		
+		inArrIdx = idx - (arrIdx - 1) * MAX_ARRAY_LENGTH
+
+		' Fix.
+		If inArrIdx < 1 Then
+			Call LogMsg(LOG_LEVEL_WARN, "Possible problem working with point list:"
+				+ ", idx " + idx
+				+ ", inArrIdx " + inArrIdx
+				+ ", arrIdx " + arrIdx
+				+ ", list.magazine size " + UBound(list.magazine))
+			
+			inArrIdx = 1
+		End If
+
+		If Not (arrIdx < 1 Or arrIdx > UBound(list.magazine)
+				Or inArrIdx < 1 Or inArrIdx > UBound(list.magazine(arrIdx).items)) Then
+			Call CopyPoint2D(list.magazine(arrIdx).items(inArrIdx), res)
+		Else
+			Call LogMsg(LOG_LEVEL_ERROR, "Error working with point list:"
+				+ ", idx " + idx
+				+ ", inArrIdx " + inArrIdx
+				+ ", arrIdx " + arrIdx
+				+ ", list.magazine size " + UBound(list.magazine))
+		End If
+	End If
+End Sub
+
+
+Function PointListGetSize(list As PointList) As Integer
+	PointListGetSize = list.size
+End Function
+
+
+Sub PointListSetSize(list As PointList, ByVal size As Integer)
+	Dim magCount, remainder, i As Integer
+
+	If size > 0 Then
+		Call PointListClear(list)
+
+		magCount = size / MAX_ARRAY_LENGTH + 1
+		remainder = size Mod MAX_ARRAY_LENGTH
+
+		ReDim list.magazine(magCount)
+
+		For i = 1 To magCount
+			If i < magCount Then
+				ReDim list.magazine(i).items(MAX_ARRAY_LENGTH)
+			Else
+				ReDim list.magazine(i).items(remainder)
+			End If
+		Next
+
+		list.size = size
+	End If
+End Sub
+
+
+Sub PointListSet(list As PointList, ByVal idx As Integer, ByVal x As Float, ByVal y As Float)
+	Dim magIdx, remIdx As Integer
+
+	If idx > list.size Then
+		Call LogMsg(LOG_LEVEL_ERROR, "Index out of bounds on PointListSet: " + idx)
+	Else
+		magIdx = idx / MAX_ARRAY_LENGTH + 1
+		remIdx = idx Mod MAX_ARRAY_LENGTH
+
+		list.magazine(magIdx).items(remIdx).x = x
+		list.magazine(magIdx).items(remIdx).y = y
+	End If
+End Sub
+
+
+Sub PointListCopy(src As PointList, dst As PointList)
+	Dim i, j, k, size As Integer
+
+	size = PointListGetSize(src)
+	j = 1
+	k = 1
+
+    Call PointListClear(dst)
+	Call PointListSetSize(dst, size)
+
+	For i = 1 To size
+		If i Mod MAX_ARRAY_LENGTH = 0 Then
+			j = j + 1
+			k = 1
+		End If
+
+		Call PointListGet(src, i, dst.magazine(j).items(k))
+
+		k = k + 1
+	Next
+End Sub
+
+
+Sub PointListReorder(list As PointList, ByVal startIdx As Integer)
+	Dim newList As PointList
+	Dim size, i, newIdx As Integer
+	Dim letsRoll, isSecondLoop As Logical
+	Dim tmpP As Point2D
+	
+	size = PointListGetSize(list)
+
+	If startIdx <= size And startIdx > 0 Then
+		i = startIdx
+		letsRoll = startIdx <> 1
+		newIdx = 1
+		
+		Call PointListSetSize(newList, size)
+		
+		Do While TRUE
+			Call PointListGet(list, i, tmpP)
+			Call PointListSet(newList, newIdx, tmpP.x, tmpP.y)
+			
+			i = i + 1
+			
+			If letsRoll Then
+				If Not isSecondLoop And i > size Then
+					i = 1
+					isSecondLoop = TRUE
+				ElseIf isSecondLoop And i >= startIdx Then
+					Exit Do
+				End If
+			Else
+				If i > size Then
+					Exit Do
+				End If
+			End If
+			
+			newIdx = newIdx + 1
+		Loop
+		
+		Call PointListCopy(newList, list)
+	End If
+End Sub
+
+
+Sub PointListInvert(list As PointList)
+	Dim newList As PointList
+	Dim i As Integer
+	Dim tmpP As Point2D
+	
+	If list.size > 0 Then
+		Call PointListSetSize(newList(list.size))
+		
+		For i = list.size To 1 Step -1
+			Call PointListGet(list, i, tmpP)
+			Call PointListSet(newList, list.size - i + 1, tmpP.x, tmpP.y)
+		Next
+		
+		Call PointListCopy(newList, list)
+	End If
+End Sub

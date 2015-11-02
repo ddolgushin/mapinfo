@@ -1,0 +1,121 @@
+Include "URL.def"
+Include "Util.def"
+
+
+'
+' Get protocol from given URL,
+' e.g. "http://www.test.net/?pageId=104654&uid=j3487" => "http"
+'
+Function URLGetProtocol(url As String) As String
+	Dim res As String
+	Dim pos As Integer
+	
+	If Len(url) > 0 Then
+		pos = InStr(1, url, URL_PROTOCOL_SEPARATOR)
+		
+		If pos > 0 Then
+			res = Mid$(url, 1, pos - 1)
+		End If
+	End If
+	
+	URLGetProtocol = res
+End Function
+
+
+'
+' Get the host name from given URL,
+' e.g. "http://www.test.net/?pageId=104654&uid=j3487" => "www.test.net"
+'
+Function URLGetHost(url As String) As String
+	Dim res As String
+	Dim pos1, pos2 As Integer
+	
+	If Len(url) > 0 Then
+		pos1 = InStr(1, url, URL_PROTOCOL_SEPARATOR)
+		
+		If pos1 = 0 Then
+			pos1 = 1
+		Else
+			pos1 = pos1 + Len(URL_PROTOCOL_SEPARATOR)
+		End If
+		
+		pos2 = InStr(pos1, url, URL_PART_SEPARATOR)
+		
+		If pos2 = 0 Then
+			pos2 = Len(url) - pos1
+		End If
+		
+		res = Mid$(url, pos1, pos2 - pos1)
+	End If
+	
+	URLGetHost = res
+End Function
+
+
+'
+' Get the URL part following after the host name,
+' e.g. "http://www.test.net/?pageId=104654&uid=j3487" => "pageId=104654&uid=j3487"
+'
+Function URLGetTail(url As String) As String
+	Dim res As String
+	Dim pos As Integer
+	
+	If Len(url) > 0 Then
+		pos = InStr(1, url, URL_PROTOCOL_SEPARATOR)
+		
+		If pos = 0 Then
+			pos = 1
+		Else
+			pos = pos + Len(URL_PROTOCOL_SEPARATOR)
+		End If
+		
+		pos = InStr(pos, url, URL_PART_SEPARATOR)
+		res = Mid$(url, pos + 1, Len(url) - pos)
+	End If
+	
+	URLGetTail = res
+End Function
+
+
+'
+' Fill parameter=>value hash table.
+'
+Sub URLGetParameters(url As String, pmap As HashTable)
+	Dim paramStr As String
+	Dim pairs(), pair() As String
+	Dim pos As Integer
+	Dim i, size, pairSize As Integer
+	Dim k, v As String
+	
+	Call HashTableClear(pmap)
+	
+	If Len(url) > 0 Then
+		pos = InStr(1, url, URL_QUERY_SEPARATOR)
+		
+		If pos > 0 Then
+			paramStr = Mid$(url, pos + 1, Len(url) - pos)
+			
+			Call Split(paramStr, "&", pairs)
+			
+			size = UBound(pairs)
+			
+			For i = 1 To size
+				Call Split(pairs(i), "=", pair)
+				
+				pairSize = UBound(pair)
+				k = ""
+				v = ""
+				
+				If pairSize > 0 Then
+					k = pair(1)
+					
+					If pairSize > 1 Then
+						v = pair(2)
+					End If
+					
+					Call HashTableAdd(pmap, k, v)
+				End If
+			Next
+		End If
+	End If
+End Sub

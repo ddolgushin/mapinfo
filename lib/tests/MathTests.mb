@@ -1,0 +1,812 @@
+Include "Globals.def"
+Include "MathTests.def"
+
+
+Function TestGetPointOnLine() As String
+	Dim res As Logical
+	Dim p1, p2, resP As Point2D
+	
+	Call CreatePoint2D(p1, 0, 0)
+	Call CreatePoint2D(p2, 1, 1)
+	
+	Call GetPointOnLine(p1, p2, 0.7, resP)
+	
+	res = (Round(resP.x, 0.1) = 0.5 And Round(resP.y, 0.1) = 0.5)
+	
+	If res Then
+		TestGetPointOnLine = RESULT_PASSED
+	Else
+		TestGetPointOnLine = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestCompareMatrices() As String
+	Dim res As Logical
+	
+    Dim m1, m2 As Matrix
+    Dim m1r1, m1r2, m1r3, m2r1, m2r2, m2r3 As MatrixRow
+    Dim flarr(3) As Float
+	
+    flarr(1) = 1
+    flarr(2) = 2
+    flarr(3) = 3
+	
+    Call CreateRow(m1r1, flarr)
+	
+    flarr(1) = 4
+    flarr(2) = 5
+    flarr(3) = 6
+	
+    Call CreateRow(m1r2, flarr)
+	
+	flarr(1) = 7
+    flarr(2) = 8
+    flarr(3) = 9
+	
+    Call CreateRow(m1r3, flarr)
+    
+    flarr(1) = 1
+    flarr(2) = 2
+    flarr(3) = 3
+    
+    Call CreateRow(m2r1, flarr)
+    
+    flarr(1) = 4
+    flarr(2) = 5
+    flarr(3) = 6
+    
+    Call CreateRow(m2r2, flarr)
+    
+    flarr(1) = 7
+    flarr(2) = 8
+    flarr(3) = 9
+    
+    Call CreateRow(m2r3, flarr)
+    
+    Call AddRow(m1, m1r1)
+    Call AddRow(m1, m1r2)
+    Call AddRow(m1, m1r3)
+    
+    Call AddRow(m2, m2r1)
+    Call AddRow(m2, m2r2)
+    Call AddRow(m2, m2r3)
+    
+    res = CompareMatrices(m1, m2)
+	
+	If res Then
+		TestCompareMatrices = RESULT_PASSED
+	Else
+		TestCompareMatrices = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestMultiplyMatrices() As String
+	Dim res As Logical
+    Dim m1, m2, mRes, mStand As Matrix
+    Dim m1r1, m1r2, m1r3, m2r1, m2r2, m2r3, msr1, msr2, msr3 As MatrixRow
+    Dim flarr(3) As Float
+    
+    flarr(1) = 0.5
+    flarr(2) = -0.87
+    flarr(3) = 0
+    
+    Call CreateRow(m1r1, flarr)
+    
+    flarr(1) = 0.87
+    flarr(2) = 0.5
+    flarr(3) = 0
+    
+    Call CreateRow(m1r2, flarr)
+    
+    flarr(1) = 0
+    flarr(2) = 0
+    flarr(3) = 1
+    
+    Call CreateRow(m1r3, flarr)
+    
+    flarr(1) = 1
+    flarr(2) = 0
+    flarr(3) = 5
+    
+    Call CreateRow(m2r1, flarr)
+    
+    flarr(1) = 0
+    flarr(2) = 1
+    flarr(3) = 2
+    
+    Call CreateRow(m2r2, flarr)
+    
+    flarr(1) = 0
+    flarr(2) = 0
+    flarr(3) = 1
+    
+    Call CreateRow(m2r3, flarr)
+    
+    flarr(1) = 0.5
+    flarr(2) = -0.87
+    flarr(3) = 0.76
+    
+    Call CreateRow(msr1, flarr)
+
+	flarr(1) = 0.87
+    flarr(2) = 0.5
+    flarr(3) = 5.35
+
+    Call CreateRow(msr2, flarr)
+    
+    flarr(1) = 0
+    flarr(2) = 0
+    flarr(3) = 1
+
+    Call CreateRow(msr3, flarr)
+    
+    Call AddRow(m1, m1r1)
+    Call AddRow(m1, m1r2)
+    Call AddRow(m1, m1r3)
+    
+    Call AddRow(m2, m2r1)
+    Call AddRow(m2, m2r2)
+    Call AddRow(m2, m2r3)
+    
+    Call AddRow(mStand, msr1)
+    Call AddRow(mStand, msr2)
+    Call AddRow(mStand, msr3)
+    
+    Call MultiplyMatrices(m1, m2, mRes)
+    
+    res = CompareMatrices(mRes, mStand)
+    
+    If res Then
+        TestMultiplyMatrices = RESULT_PASSED
+	Else
+		TestMultiplyMatrices = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetAngleBetweenLines2D() As String
+	Dim res As Logical
+	Dim l1, l2 As Line2D
+	
+	Call CreateLine2DExt(l1, 1, 1, 2, 2)
+	Call CreateLine2DExt(l2, 0, 0, 1, 1)
+	
+	res = g_debug
+	
+	If g_debug Then
+		Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 0=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+	Else
+		res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 0)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, 1, -2, 1)
+		Call CreateLine2DExt(l2, 0, 1, -1, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 45=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 45)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 1278232.1, 149931.32, 1245223.54, 232452.63)
+		Call CreateLine2DExt(l2, 1036493.99, 186811.76, 954801.95, 221822.51)
+
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 45=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 45)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, -1, 0, -2)
+		Call CreateLine2DExt(l2, 1, 0, 2, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 90=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 90)
+		End If
+    End If
+    
+    If res Then
+    	Call CreateLine2DExt(l1, 1, 1, 2, 1)
+    	Call CreateLine2DExt(l2, 0, 1, -1, 1)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 180=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 180)
+		End If
+    End If
+    
+    If res Then
+    	Call CreateLine2DExt(l1, 1, 1, 2, 1)
+    	Call CreateLine2DExt(l2, 0, 1, -1, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 225=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 225)
+		End If
+    End If
+    
+    If res Then
+    	Call CreateLine2DExt(l1, -1, 1, 1, 1)
+    	Call CreateLine2DExt(l2, 1, 1, 1, -1)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 270=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 270)
+		End If
+    End If
+	
+    If res Then
+    	Call CreateLine2DExt(l1, 0, 0, 1, 0)
+    	Call CreateLine2DExt(l2, -1, 1, 0, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 315=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 315)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 2, 2, 1, 1)
+		Call CreateLine2DExt(l2, 0, 0, -1, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 315=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 315)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, 1)
+		Call CreateLine2DExt(l2, 0, 0, -1, -0.5)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 162=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 162)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, 1)
+		Call CreateLine2DExt(l2, 1, 1, 2, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 270=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 270)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, -1, 0, 0)
+		Call CreateLine2DExt(l2, 0, 0, 1, 2)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 18=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 18)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, -1, 0, 0)
+		Call CreateLine2DExt(l2, 0, 0, 2, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 315=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 315)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, 1, 0, 0)
+		Call CreateLine2DExt(l2, 0, 0, 2, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 45=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 45)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, 1, 0, 0)
+		Call CreateLine2DExt(l2, 0, 0, 0, -2)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 315=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 315)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, 1, 0, 0)
+		Call CreateLine2DExt(l2, -1, -1, 0, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 90=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 90)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, -1, 1, 0, 0)
+		Call CreateLine2DExt(l2, -2, 0, 0, 0)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 45=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 45)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, 0)
+		Call CreateLine2DExt(l2, 0, 0, -1, -1)
+		
+		If g_debug Then
+			Print Line2DToString(l1) + ", " + Line2DToString(l2) + ", 225=" + Round(GetAngleBetweenLines2D(l1, l2), 1)
+		Else
+			res = (Round(GetAngleBetweenLines2D(l1, l2), 1) = 225)
+		End If
+	End If
+	
+	If res Then
+		TestGetAngleBetweenLines2D = RESULT_PASSED
+	Else
+		TestGetAngleBetweenLines2D = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetVector2DQuadrant() As String
+	Dim res As Logical
+	Dim v As Vector2D
+	
+	Call CreateVector2DExt(v, 1, 0)
+	
+	res = (GetVector2DQuadrant(v) = QUADRANT_I)
+	
+	If res Then
+		Call CreateVector2DExt(v, 1, 1)
+		
+		res = (GetVector2DQuadrant(v) = QUADRANT_I)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 0, 1)
+
+		res = (GetVector2DQuadrant(v) = QUADRANT_II)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, 1)
+		
+		res = (GetVector2DQuadrant(v) = QUADRANT_II)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, 0)
+		
+		res = (GetVector2DQuadrant(v) = QUADRANT_III)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, -1)
+		
+		res = (GetVector2DQuadrant(v) = QUADRANT_III)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 0, -1)
+		
+		res = (GetVector2DQuadrant(v) = QUADRANT_IV)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 1, -1)
+		
+		res = (GetVector2DQuadrant(v) = QUADRANT_IV)
+	End If
+	
+	If res Then
+		TestGetVector2DQuadrant = RESULT_PASSED
+	Else
+		TestGetVector2DQuadrant = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestChangeVector2DDirection() As String
+	Dim res As Logical
+	Dim v As Vector2D
+	
+	Call CreateVector2DExt(v, -1, -1)
+	
+	Call ChangeVector2DDirection(v, DIRECTION_NORTH)
+	
+	res = (v.p.x > 0 And v.p.y > 0)
+	
+	If res Then
+		Call CreateVector2DExt(v, 1, -1)
+		
+		Call ChangeVector2DDirection(v, DIRECTION_NORTH)
+		
+		res = (v.p.x < 0 And v.p.y > 0)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 1, 1)
+		
+		Call ChangeVector2DDirection(v, DIRECTION_SOUTH)
+		
+		res = (v.p.x < 0 And v.p.y < 0)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, 1)
+		
+		Call ChangeVector2DDirection(v, DIRECTION_SOUTH)
+		
+		res = (v.p.x > 0 And v.p.y < 0)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, -1)
+		
+		Call ChangeVector2DDirection(v, DIRECTION_EAST)
+		
+		res = (v.p.x > 0 And v.p.y < 0)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 1, -1)
+		
+		Call ChangeVector2DDirection(v, DIRECTION_WEST)
+		
+		res = (v.p.x < 0 And v.p.y < 0)
+	End If
+	
+	If res Then
+		TestChangeVector2DDirection = RESULT_PASSED
+	Else
+		TestChangeVector2DDirection = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetFunctionValue() As String
+	Dim res As Logical
+	Dim l As Line2D
+	
+	TestGetFunctionValue = RESULT_PASSED
+	
+	Call CreateLine2DExt(l, 1, 1, 2, 2)
+	
+	res = (GetFunctionValue(l, 3) = 3)
+	
+	If res Then
+		res = (GetFunctionValue(l, -1) = -1)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l, 0, 0, 0, 0)
+		
+		res = (GetFunctionValue(l, 1) = 0)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l, 0, 0, 0, 1)
+		
+		res = (GetFunctionValue(l, 0) = MAX_INT)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l, 0, 0, 0, -1)
+		
+		res = (GetFunctionValue(l, 0) = -MAX_INT)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l, 0, 0, 3, 1)
+		
+		res = (GetFunctionValue(l, 6) = 2)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l, 13565798.9600311350, 7332163.9102328690,
+			13567798.8800311350, 7332257.6564828688)
+		
+		res = (Round(GetFunctionValue(l, 13569792.5502811340), 0.01) = 7332351.11)
+	End If
+	
+	If res Then
+		TestGetFunctionValue = RESULT_PASSED
+	Else
+		TestGetFunctionValue = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestCompare2DLines() As String
+	Dim res As Logical
+	Dim l1, l2 As Line2D
+	Dim p11, p12, p21, p22 As Point2D
+
+	Call CreateLine2DExt(l1, 0, 0, 1, 1)
+	Call CreateLine2DExt(l2, 0, 0, 2, 2)
+	
+	res = g_debug
+	
+	If g_debug Then
+		Print "0=" + Compare2DLines(l1, l2)
+	Else
+		res = (Compare2DLines(l1, l2) = 0)
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, 1)
+		Call CreateLine2DExt(l2, 0, 0, -1, 1)
+		
+		If g_debug Then
+			Print "1=" + Compare2DLines(l1, l2)
+		Else
+			res = (Compare2DLines(l1, l2) = 1)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, -1, 1)
+		Call CreateLine2DExt(l2, 0, 0, -2, 1)
+		
+		If g_debug Then
+			Print "-1=" + Compare2DLines(l1, l2)
+		Else
+			res = (Compare2DLines(l1, l2) = -1)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, 0)
+		Call CreateLine2DExt(l2, -1, 1, 0, 0)
+		
+		If g_debug Then
+			Print "1=" + Compare2DLines(l1, l2)
+		Else
+			res = (Compare2DLines(l1, l2) = 1)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, -1)
+		Call CreateLine2DExt(l2, 0, 0, 1, -2)
+		
+		If g_debug Then
+			Print "1=" + Compare2DLines(l1, l2)
+		Else
+			res = (Compare2DLines(l1, l2) = 1)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 0, 1)
+		Call CreateLine2DExt(l2, 0, 0, 1, 0)
+		
+		If g_debug Then
+			Print "1=" + Compare2DLines(l1, l2)
+		Else
+			res = (Compare2DLines(l1, l2) = 1)
+		End If
+	End If
+	
+	If res Then
+		Call CreateLine2DExt(l1, 0, 0, 1, 0)
+		Call CreateLine2DExt(l2, 0, 0, 0, 1)
+		
+		If g_debug Then
+			Print "-1=" + Compare2DLines(l1, l2)
+		Else
+			res = (Compare2DLines(l1, l2) = -1)
+		End If
+	End If
+	
+	If res Then
+		TestCompare2DLines = RESULT_PASSED
+	Else
+		TestCompare2DLines = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetVector2DVerticalDirection() As String
+	Dim res As Logical
+	Dim v As Vector2D
+	
+	Call CreateVector2DExt(v, 1, 1)
+	
+	res = (GetVector2DVerticalDirection(v) = DIRECTION_NORTH)
+	
+	If res Then
+		Call CreateVector2DExt(v, 0, 1)
+		
+		res = (GetVector2DVerticalDirection(v) = DIRECTION_NORTH)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, 0)
+		
+		res = (GetVector2DVerticalDirection(v) = DIRECTION_NORTH)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, -1)
+		
+		res = (GetVector2DVerticalDirection(v) = DIRECTION_SOUTH)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 0, -1)
+		
+		res = (GetVector2DVerticalDirection(v) = DIRECTION_SOUTH)
+	End If
+	
+	If res Then
+		TestGetVector2DVerticalDirection = RESULT_PASSED
+	Else
+		TestGetVector2DVerticalDirection = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetVector2DHorizontalDirection() As String
+	Dim res As Logical
+	Dim v As Vector2D
+	
+	Call CreateVector2DExt(v, 1, 1)
+	
+	res = (GetVector2DHorizontalDirection(v) = DIRECTION_EAST)
+	
+	If res Then
+		Call CreateVector2DExt(v, 0, 1)
+		
+		res = (GetVector2DHorizontalDirection(v) = DIRECTION_EAST)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, 0)
+		
+		res = (GetVector2DHorizontalDirection(v) = DIRECTION_WEST)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, -1, -1)
+		
+		res = (GetVector2DHorizontalDirection(v) = DIRECTION_WEST)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v, 0, -1)
+		
+		res = (GetVector2DHorizontalDirection(v) = DIRECTION_EAST)
+	End If
+	
+	If res Then
+		TestGetVector2DHorizontalDirection = RESULT_PASSED
+	Else
+		TestGetVector2DHorizontalDirection = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetVector2DQuadrantDistance() As String
+	Dim res As Logical
+	Dim v1, v2 As Vector2D
+	
+	Call CreateVector2DExt(v1, 1, 1)
+	Call CreateVector2DExt(v2, -1, -1)
+	
+	res = g_debug
+	
+	If g_debug Then
+		Print GetVector2DQuadrantDistance(v1, v2)
+	Else
+		res = (GetVector2DQuadrantDistance(v1, v2) = 2)
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v1, 1, -1)
+		Call CreateVector2DExt(v2, 1, 1)
+		
+		If g_debug Then
+			Print GetVector2DQuadrantDistance(v1, v2)
+		Else
+			res = (GetVector2DQuadrantDistance(v1, v2) = 1)
+		End If
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v1, 1, -1)
+		Call CreateVector2DExt(v2, -1, -1)
+		
+		If g_debug Then
+			Print GetVector2DQuadrantDistance(v1, v2)
+		Else
+			res = (GetVector2DQuadrantDistance(v1, v2) = 3)
+		End If
+	End If
+	
+	If res Then
+		Call CreateVector2DExt(v1, 1, 1)
+		Call CreateVector2DExt(v2, 1, 2)
+		
+		If g_debug Then
+			Print GetVector2DQuadrantDistance(v1, v2)
+		Else
+			res = (GetVector2DQuadrantDistance(v1, v2) = 0)
+		End If
+	End If
+	
+	If res Then
+		TestGetVector2DQuadrantDistance = RESULT_PASSED
+	Else
+		TestGetVector2DQuadrantDistance = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestGetMinMaxInArr() As String
+	Dim res As Logical
+	Dim testArr() As Float
+	
+	Call AddFloatToArray(testArr, 15.5)
+	Call AddFloatToArray(testArr, 12.2)
+	Call AddFloatToArray(testArr, 100)
+	Call AddFloatToArray(testArr, 75.0)
+	Call AddFloatToArray(testArr, 99.9)
+	Call AddFloatToArray(testArr, 0)
+	
+	res = (GetMax(testArr) = 100)
+	
+	If res Then
+		res = (GetMin(testArr) = 0)
+	End If
+	
+	If res Then
+		TestGetMinMaxInArr = RESULT_PASSED
+	Else
+		TestGetMinMaxInArr = RESULT_FAILED
+	End If
+End Function
+
+
+Function TestDegreeToDegMin() As String
+	Dim res As Logical
+	Dim deg, min As Float
+	
+	Call FloatDegreeToDegMin(18.5, deg, min)
+	
+	res = (deg = 18 And min = 30)
+	
+	If res Then
+		TestDegreeToDegMin = RESULT_PASSED
+	Else
+		TestDegreeToDegMin = RESULT_FAILED
+	End If
+End Function

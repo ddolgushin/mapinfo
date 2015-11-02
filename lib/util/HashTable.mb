@@ -1,0 +1,449 @@
+Include "mapbasic.def"
+Include "HashTable.def"
+Include "../util/Util.def"
+Include "../util/Logger.def"
+
+
+Define COMPARE_STR	1
+Define COMPARE_NUM	2
+
+
+Declare Sub HashTableAddEx(table As HashTable, ByVal key As String,
+	ByVal value As String, ByVal noDubs As Logical)
+Declare Sub Swap(val1 As String, val2 As String)
+Declare Sub HashTableCreateKVPair(pair As KVPair, key As String, value As String)
+Declare Sub HashTableCopyKVPair(pairSrc As KVPair, pairDst As KVPair)
+Declare Sub HashTableSortEx(table As HashTable, ByVal byValue As Logical,
+	ByVal asc As Logical, ByVal asNumber As Logical)
+
+Declare Function HashTableGetOp(table As HashTable, ByVal key As String,
+	ByVal caseSensitive As Logical) As String
+Declare Function Compare(ByVal v1 As String, ByVal v2 As String,
+	ByVal cmpType As SmallInt) As SmallInt
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Create HashTable from same sized keys and values arrays.
+'
+Function HashTableCreate(table As HashTable, keys() As String,
+		values() As String) As Logical
+	Dim res As Logical
+	Dim keyCount, valueCount As Integer
+	Dim i As Integer
+	
+	res = TRUE
+	keyCount = UBound(keys)
+	valueCount = UBound(values)
+	
+	If keyCount <> valueCount Then
+		res = FALSE
+	Else
+		Call HashTableClear(table)
+		
+		For i = 1 To keyCount
+			Call HashTableAdd(table, keys(i), values(i))
+		Next
+	End If
+	
+	HashTableCreate = res
+End Function
+
+
+'
+' Add item to table. Key duplications excluded.
+'
+Sub HashTableAdd(table As HashTable, ByVal key As String,
+		ByVal value As String)
+	Call HashTableAddEx(table, key, value, TRUE)
+End Sub
+
+
+'
+' Add item to table.
+'
+' WARNING: key duplications not checked! Totally relying on user's
+'          knowledge that there's no dubs.
+'
+Sub HashTableAddBlind(table As HashTable, ByVal key As String,
+		ByVal value As String)
+	Call HashTableAddEx(table, key, value, FALSE)
+End Sub
+
+
+'
+' Get hash table value by key.
+'
+Function HashTableGet(table As HashTable, ByVal key As String) As String
+	HashTableGet = HashTableGetOp(table, key, TRUE)
+End Function
+
+
+'
+' Case insensitive search.
+'
+Function HashTableGetI(table As HashTable, ByVal key As String) As String
+	HashTableGetI = HashTableGetOp(table, key, FALSE)
+End Function
+
+
+'
+' Remove key-value pair from hash table (if any) and return deleted value.
+'
+Function HashTableDelete(table As HashTable, ByVal key As String) As String
+	Dim res As String
+	
+	If HashTableKeyExists(table, key) Then
+		Dim i, j, size As Integer
+		Dim tmpBuf() As KVPair
+		
+		j = 1
+		size = UBound(table.arr)
+		
+		ReDim tmpBuf(size - 1)
+		
+		For i = 1 To size
+			If StringCompare(table.arr(i).key, key) <> 0 Then
+				Call HashTableCopyKVPair(table.arr(i), tmpBuf(j))
+				
+				j = j + 1
+			End If
+		Next
+		
+		size = UBound(tmpBuf)
+		
+		ReDim table.arr(size)
+		
+		For i = 1 To size
+			Call HashTableCopyKVPair(tmpBuf(i), table.arr(i))
+		Next
+	End If
+	
+	HashTableDelete = res
+End Function
+
+
+'
+' Check if key is in hash table.
+'
+Function HashTableKeyExists(table As HashTable, ByVal key As String) As Logical
+	HashTableKeyExists = (HashTableGetKeyIndex(table, key) > 0)
+End Function
+
+
+Function HashTableGetKeyIndex(table As HashTable, ByVal key As String) As Integer
+	Dim res As Integer
+	Dim i, size As Integer
+	
+	size = UBound(table.arr)
+	
+	For i = 1 To size
+		If StringCompare(table.arr(i).key, key) = 0 Then
+			res = i
+			
+			Exit For
+		End If
+	Next
+	
+	HashTableGetKeyIndex = res
+End Function
+
+
+Sub HashTableClear(table As HashTable)
+	ReDim table.arr(0)
+End Sub
+
+
+Function HashTableGetSize(table As HashTable) As Integer
+	HashTableGetSize = UBound(table.arr)
+End Function
+
+
+'
+' Get array of hash table keys.
+'
+Sub HashTableGetKeys(table As HashTable, keys() As String)
+	Dim size, i As Integer
+	
+	size = UBound(table.arr)
+	
+	ReDim keys(size)
+	
+	For i = 1 To size
+		keys(i) = table.arr(i).key
+	Next
+End Sub
+
+
+'
+' Get array of hash table values.
+'
+Sub HashTableGetValues(table As HashTable, values() As String)
+	Dim size, i As Integer
+	
+	size = UBound(table.arr)
+	
+	ReDim values(size)
+	
+	For i = 1 To size
+		values(i) = table.arr(i).value
+	Next
+End Sub
+
+
+Function HashTableToString(table As HashTable) As String
+	Dim size, i As Integer
+	Dim res As String
+	
+	size = UBound(table.arr)
+	
+	For i = 1 To size
+		res = res + "['" + table.arr(i).key + "' => '" + table.arr(i).value + "']" + Chr$(13)
+	Next
+	
+	HashTableToString = res
+End Function
+
+
+Sub HashTableCopy(src As HashTable, dst As HashTable)
+	Dim size, i As Integer
+	
+	size = UBound(src.arr)
+	
+	ReDim dst.arr(size)
+	
+	For i = 1 To size
+		dst.arr(i).key = src.arr(i).key
+		dst.arr(i).value = src.arr(i).value
+	Next
+End Sub
+
+
+'
+' Sort hash table wither in ascending of descending order.
+'
+Sub HashTableSort(table As HashTable, ByVal byValue As Logical,
+		ByVal asc As Logical)
+	Call HashTableSortEx(table, byValue, asc, FALSE)
+End Sub
+
+
+'
+' Sort and treat values as integers.
+'
+Sub HashTableSortAsNumber(table As HashTable, ByVal byValue As Logical,
+		ByVal asc As Logical)
+	Call HashTableSortEx(table, byValue, asc, TRUE)
+End Sub
+
+
+Sub HashTableGetPair(table As HashTable, ByVal idx As Integer,
+		key As String, value As String)
+	If idx > UBound(table.arr) Or idx < 1 Then
+		Call LogMsg(LOG_LEVEL_ERROR, "Index out of bounds")
+	Else
+		key = table.arr(idx).key
+		value = table.arr(idx).value
+	End If
+End Sub
+
+
+Function HashTableJoin(table As HashTable, ByVal colGlue As String, ByVal rowGlue As String) As String
+	Dim arr() As String
+	Dim i, size As Integer
+
+	size = UBound(table.arr)
+
+	ReDim arr(size)
+
+	For i = 1 To size
+		arr(i) = table.arr(i).key + colGlue + table.arr(i).value
+	Next
+
+	HashTableJoin = Join(arr, rowGlue)
+End Function
+
+
+Function HashTableFromString(table As HashTable, ByVal s As String, ByVal colGlue As String, ByVal rowGlue As String) As Integer
+	Dim i, size As Integer
+	Dim chunks(), chunks2() As String
+	
+	Call HashTableClear(table)
+	Call Split(s, rowGlue, chunks)
+
+	size = UBound(chunks)
+
+	For i = 1 To size
+		Call Split(chunks(i), colGlue, chunks2)
+
+		If UBound(chunks2) = 2 Then
+			Call HashTableAdd(table, chunks2(1), chunks2(2))
+		End If
+	Next
+
+	HashTableFromString = HashTableGetSize(table)
+End Function
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' PRIVATE FUNCTIONS
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub HashTableAddEx(table As HashTable, ByVal key As String,
+		ByVal value As String, ByVal noDubs As Logical)
+	Dim i, size, pos As Integer
+	Dim keyExists As Logical
+	Dim pair As KVPair
+	
+	If Not (Len(key) = 0 Or key = Chr$(13)) Then
+		keyExists = FALSE
+		pos = 0
+		size = UBound(table.arr)
+		
+		If noDubs Then
+			For i = 1 To size
+				If StringCompare(table.arr(i).key, key) = 0 Then
+					keyExists = TRUE
+					
+					Exit For
+				End If
+			Next
+		End If
+		
+		If Not keyExists Then
+			pos = size + 1
+			
+			ReDim table.arr(pos)
+		Else
+			pos = i
+		End If
+		
+		Call HashTableCreateKVPair(pair, key, value)
+		Call HashTableCopyKVPair(pair, table.arr(pos))
+	End If
+End Sub
+
+
+Sub HashTableSortEx(table As HashTable, ByVal byValue As Logical,
+		ByVal asc As Logical, ByVal asNumber As Logical)
+	Dim i, size As Integer
+	Dim done As Logical
+	Dim keys(), values(), tmp As String
+	Dim expectedRes As Integer
+	Dim compareType As SmallInt
+	
+	Call HashTableGetKeys(table, keys)
+	Call HashTableGetValues(table, values)
+	
+	done = FALSE
+	size = UBound(keys)
+	
+	If asNumber Then
+		compareType = COMPARE_NUM
+	Else
+		compareType = COMPARE_STR
+	End If
+	
+	If asc Then
+		expectedRes = 1
+	Else
+		expectedRes = -1
+	End If
+	
+	Do While Not done
+		done = TRUE
+		
+		For i = 2 To size
+			If ((byValue
+						And (Compare(values(i - 1), values(i), compareType) = expectedRes))
+					Or (Not byValue
+						And (Compare(keys(i - 1), keys(i), compareType) = expectedRes))) Then
+				Call Swap(keys(i - 1), keys(i))
+				Call Swap(values(i - 1), values(i))
+				
+				done = FALSE
+			End If
+		Next
+	Loop
+	
+	If HashTableCreate(table, keys, values) Then End If
+End Sub
+
+
+'
+' Compare two values as strings or as numbers. Return -1 if 1st < 2nd,
+' 0 if equal, 1 otherwise.
+'
+Function Compare(ByVal v1 As String, ByVal v2 As String,
+		ByVal cmpType As SmallInt) As SmallInt
+	Dim res As SmallInt
+	Dim v1F, v2F As Float
+	
+	If cmpType = COMPARE_STR Then
+		res = StringCompare(v1, v2)
+	ElseIf cmpType = COMPARE_NUM Then
+		v1F = StrToFloat(v1)
+		v2F = StrToFloat(v2)
+		
+		If v1F < v2F Then
+			res = -1
+		ElseIf v1F = v2F Then
+			res = 0
+		Else
+			res = 1
+		End If
+	End If
+	
+	Compare = res
+End Function
+
+
+Sub Swap(val1 As String, val2 As String)
+	Dim tmp As String
+	
+	tmp = val1
+	val1 = val2
+	val2 = tmp
+End Sub
+
+
+Sub HashTableCreateKVPair(pair As KVPair, key As String, value As String)
+	pair.key = key
+	pair.value = value
+End Sub
+
+
+Sub HashTableCopyKVPair(pairSrc As KVPair, pairDst As KVPair)
+	pairDst.key = pairSrc.key
+	pairDst.value = pairSrc.value
+End Sub
+
+
+Function HashTableGetOp(table As HashTable, ByVal key As String,
+		ByVal caseSensitive As Logical) As String
+	Dim i, size As Integer
+	Dim res As String
+	
+	size = UBound(table.arr)
+	
+	For i = 1 To size
+		If (caseSensitive And StringCompare(table.arr(i).key, key) = 0)
+				Or (Not caseSensitive
+					And StringCompare(LCase$(table.arr(i).key), LCase$(key)) = 0) Then
+			res = table.arr(i).value
+			
+			Exit For
+		End If
+	Next
+	
+	HashTableGetOp = res
+End Function

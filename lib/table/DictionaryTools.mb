@@ -1,0 +1,293 @@
+Include "mapbasic.def"
+Include "DictionaryTools.def"
+Include "TableTools.def"
+Include "EncodingTools.def"
+Include "../util/Array.def"
+Include "../util/Util.def"
+
+
+'
+' Put all values of some field into array.
+'
+Sub SliceByField(ByVal tableName As String, ByVal fieldName As String,
+		ByVal order As Logical, values() As String)
+	Dim orderClause As String
+	
+	If IsTableOpen(tableName) Then
+		ReDim values(0)
+		
+		If order = TRUE Then orderClause = " Order By " + fieldName End If
+		
+		Run Command "Select " + fieldName
+			+ " From " + tableName + orderClause
+			+ " Into tmpSliceByFieldTable Noselect"
+		
+		Fetch First From tmpSliceByFieldTable
+		
+		Do While Not EOT(tmpSliceByFieldTable)
+			Call AddStringToArray(values, DecodeFromDB(tmpSliceByFieldTable.col(1)))
+			
+			Fetch Next From tmpSliceByFieldTable
+		Loop
+		
+		Close Table tmpSliceByFieldTable
+	End If
+End Sub
+
+
+Sub SliceByFields(ByVal tableName As String, fieldNames() As String, ByVal delim As String,
+		orderFields() As String, values() As String)
+	Dim orderClause As String
+	Dim tmpValues() As String
+	Dim i, size As Integer
+	
+	If IsTableOpen(tableName) Then
+		ReDim values(0)
+
+		If UBound(orderFields) > 0 Then orderClause = " Order By " + Join(orderFields, ",") End If
+		
+		size = UBound(fieldNames)
+		
+		Run Command "Select " + Join(fieldNames, ",")
+			+ " From " + tableName + orderClause
+			+ " Into tmpSliceByFieldsTable Noselect"
+		
+		Fetch First From tmpSliceByFieldsTable
+		
+		Do While Not EOT(tmpSliceByFieldsTable)
+			ReDim tmpValues(0)
+
+			For i = 1 To size
+				Call AddStringToArray(tmpValues, DecodeFromDB(tmpSliceByFieldsTable.Col(i)))
+			Next
+
+			Call AddStringToArray(values, JoinExt(tmpValues, delim, TRUE))
+			
+			Fetch Next From tmpSliceByFieldsTable
+		Loop
+		
+		Close Table tmpSliceByFieldsTable
+	End If
+End Sub
+
+
+'
+' Place values from two specified columns into a hashtable.
+'
+Sub FillDictionary(ByVal tableName As String, ByVal field1 As String,
+		ByVal field2 As String, ByVal order As Logical,
+		ByVal orderFieldName As String, ht As HashTable)
+	Call FillDictionaryEx(tableName, field1, field2, order, orderFieldName, ht, TRUE, "")
+End Sub
+
+
+'
+' Allows to pass duplicating keys. Indeed it is introduced to speedup
+' large dictionary loading when it is known for sure that there is no dubs.
+'
+Sub FillDictionaryEx(ByVal tableName As String, ByVal field1 As String,
+		ByVal field2 As String, ByVal order As Logical,
+		ByVal orderFieldName As String, ht As HashTable, ByVal noDubs As Logical,
+		ByVal semicolonRepl As String)
+	Dim orderClause, tmpKey, tmpValue As String
+	Dim replSc As Logical
+	
+	Call HashTableClear(ht)
+	
+	If IsTableOpen(tableName) Then
+		replSc = (Len(semicolonRepl) > 0)
+
+		If order Then orderClause = " Order By " + orderFieldName End If
+		
+		Run Command "Select " + field1 + ", " + field2
+			+ " From " + tableName
+			+ orderClause
+			+ " Into tmpDictFillTable Noselect"
+		
+		Fetch First From tmpDictFillTable
+
+		Do While Not EOT(tmpDictFillTable)
+			tmpKey = tmpDictFillTable.Col(1)
+			tmpValue = tmpDictFillTable.Col(2)
+
+			If replSc Then tmpValue = StrReplace(";", semicolonRepl, tmpValue) End If
+			If noDubs Then Call HashTableAdd(ht, tmpKey, tmpValue)
+			Else Call HashTableAddBlind(ht, tmpKey, tmpValue) End If
+			
+			Fetch Next From tmpDictFillTable
+		Loop
+		
+		Close Table tmpDictFillTable
+	End If
+End Sub
+
+
+'
+' Replace all occurences of hashtable keys in certain table field
+' with corresponding values.
+'
+Function ReplaceFieldByDictionary(ByVal tableName As String,
+		ByVal fieldName As String, ht As HashTable) As Integer
+	Dim res As Integer
+	Dim i, size As Integer
+	Dim curDictKey As String
+	
+	If IsTableOpen(tableName) And HashTableGetSize(ht) > 0
+			And Len(fieldName) > 0 Then
+		size = TableInfo(tableName, TAB_INFO_NROWS)
+		
+		For i = 1 To size
+			Run Command "Select " + fieldName
+				+ " From " + tableName
+				+ " Where RowID=" + i
+				+ " Into tmpUpTable Noselect"
+			
+			curDictKey = tmpUpTable.Col(1)
+			
+			If HashTableKeyExists(ht, curDictKey) Then
+				Run Command "Update tmpUpTable"
+					+ " Set " + fieldName + "="""
+					+ EncodeForDB(HashTableGet(ht, curDictKey)) + """"
+			End If
+		Next
+	End If
+	
+	ReplaceFieldByDictionary = res
+End Function
+
+
+'
+' Search for dictionary item code and return its position
+' in *ordered by value* table.
+'
+' If no matches found, function tries to find one of "not specified"
+' items and, if finds, returns its order number instead of zero.
+'
+' Dictionary table is one of imported from XML.
+'
+Function DictionaryCodeToNum(ByVal code As String,
+		ByVal dictTable As String) As Integer
+	Dim res, id As Integer
+	Dim tmpStr As String
+	
+	If IsTableOpen(dictTable) Then
+		Run Command "Select code, value From " + dictTable
+			+ " Into tmpDictTable Noselect"
+			+ " Order By value"
+		
+		Fetch First From tmpDictTable
+		
+		Do While Not EOT(tmpDictTable)
+			id = id + 1
+			
+			If tmpDictTable.code = code Then
+				res = id
+				
+				Exit Do
+			End If
+			
+			Fetch Next From tmpDictTable
+		Loop
+		
+		' If nothing found, try to return "not specified" item code.
+		If res = 0 Then
+			id = 0
+			
+			Fetch First From tmpDictTable
+			
+			Do While Not EOT(tmpDictTable)
+				id = id + 1
+				tmpStr = LCase$(tmpDictTable.value)
+				
+				If StartsWith(tmpStr, "неопр")
+						Or StartsWith(tmpStr, "не устан")
+						Or StartsWith(tmpStr, "неустан")
+						Or StartsWith(tmpStr, "не указ")
+						Or StartsWith(tmpStr, "категория не установлена")
+						Or StartsWith(tmpStr, "значение площади отсутствует")
+						Or StartsWith(tmpStr, "значение отсутствует")
+						Or StartsWith(tmpStr, "иной природный объект")
+						Or StartsWith(tmpStr, "прочие земли поселений") Then
+					res = id
+					
+					Exit Do
+				End If
+				
+				Fetch Next From tmpDictTable
+			Loop
+		End If
+		
+		Close Table tmpDictTable
+	End If
+	
+	DictionaryCodeToNum = res
+End Function
+
+
+'
+' The same as DictionaryCodeToNum, but returns associated value.
+'
+Function DictionaryCodeToValue(ByVal code As String,
+		ByVal dictTable As String) As String
+	Dim res As String
+	
+	If IsTableOpen(dictTable) Then
+		Run Command "Select code, value From " + dictTable
+			+ " Where code=""" + code + """"
+			+ " Into tmpDictTable Noselect"
+		
+		If TableInfo(tmpDictTable, TAB_INFO_NROWS) > 0 Then
+			Fetch First From tmpDictTable
+			
+			res = tmpDictTable.value
+		End If
+		
+		Close Table tmpDictTable
+	End If
+	
+	DictionaryCodeToValue = res
+End Function
+
+
+Function DictionaryNumToValue(ByVal num As Integer,
+		ByVal dictTable As String, ByVal skipFirst As Logical) As String
+	Dim code As String
+	
+	code = DictionaryNumToCode(num, dictTable, skipFirst)
+	
+	DictionaryNumToValue = DictionaryCodeToValue(code, dictTable)
+End Function
+
+
+'
+' "skipFirst" - means that in related combo box first value
+' was empty and "num" should be decreased by 1.
+'
+Function DictionaryNumToCode(ByVal num As Integer,
+		ByVal dictTable As String, ByVal skipFirst As Logical) As String
+	Dim res As String
+	
+	If IsTableOpen(dictTable) Then
+		If skipFirst Then
+			num = num - 1
+		End If
+		
+		If num > 0 Then
+			Run Command "Select * From " + dictTable
+				+ " Into tmpOrderedDictTable Noselect"
+				+ " Order By value"
+			Run Command "Select code From tmpOrderedDictTable"
+				+ " Where RowID=" + num
+				+ " Into tmpDictTable Noselect"
+			
+			Fetch First From tmpDictTable
+			
+			res = tmpDictTable.code
+			
+			Close Table tmpOrderedDictTable
+			Close Table tmpDictTable
+		End If
+	End If
+	
+	DictionaryNumToCode = res
+End Function

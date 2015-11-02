@@ -1,0 +1,25 @@
+Type MatrixRow
+	cols(0) As Float
+End Type
+
+Type Matrix
+	rows(0) As MatrixRow
+End Type
+
+
+Declare Sub MultiplyMatrices(m1 As Matrix, m2 As Matrix, result As Matrix)
+Declare Sub TransposeMatrix(m As Matrix, result As Matrix)
+Declare Sub AddElemToRow(r As MatrixRow, ByVal value As Float)
+Declare Sub ClearRow(r As MatrixRow)
+Declare Sub ClearMatrix(m As Matrix)
+Declare Sub AddRow(m As Matrix, row As MatrixRow)
+Declare Sub CopyRow(rs As MatrixRow, rd As MatrixRow)
+Declare Sub CopyMatrix(ms As Matrix, md As Matrix)
+Declare Sub GetMatrixSize(m As Matrix, rc As Integer, cc As Integer)
+Declare Sub SetMatrixSize(m As Matrix, rc As Integer, cc As Integer)
+Declare Sub SetElem(m As Matrix, ByVal v As Float, ByVal r As Integer, ByVal c As Integer)
+Declare Sub CreateRow(row As MatrixRow, arr() As Float)
+
+Declare Function MatrixToString(m As Matrix) As String
+Declare Function CompareMatrices(m1 As Matrix, m2 As Matrix) As Logical
+Declare Function GetElem(m As Matrix, ByVal r As Integer, ByVal c As Integer) As Float

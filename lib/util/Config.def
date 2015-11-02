@@ -1,0 +1,24 @@
+'
+' Basic set of functions to work with configuration.
+' First load config from given file, work with its parameters,
+' and then save it.
+'
+' ConfigSave saves data in file specified while configuration opening.
+' ConfigSaveToFile saves data to file specifies as path parameter.
+' Starting from this call path value becomes default config file name.
+'
+
+Declare Sub ConfigLoad(ByVal path As String)
+Declare Sub ConfigLoadExt(ByVal path As String, ByVal createIfAbsent As Logical)
+Declare Sub ConfigSave()
+Declare Sub ConfigSaveToFile(ByVal path As String)
+
+Declare Function ConfigGetFileName() As String
+
+Declare Sub ConfigSet(ByVal paramName As String, ByVal paramValue As String)
+Declare Function ConfigGet(ByVal paramName As String) As String
+Declare Function ConfigGetL(ByVal paramName As String) As Logical
+Declare Function ConfigGetI(ByVal paramName As String) As Integer
+Declare Function ConfigGetF(ByVal paramName As String) As Float
+
+Declare Sub ConfigGetKeys(keys() As String)

@@ -1,0 +1,48 @@
+Include "mapbasic.def"
+Include "PathTools.def"
+
+
+Function PathToDir(ByVal path As String) As String
+	PathToDir = PathToDirectory$(path)
+End Function
+
+
+Function PathToName(ByVal path As String) As String
+	PathToName = PathToFileName$(path)
+End Function
+
+
+Function PathToNameNoExt(ByVal path As String) As String
+	Dim res, ext, fileName As String
+	Dim pos As Integer
+	
+	fileName = PathToName(path)
+	ext = PathToExt(path)
+	pos = InStr(1, fileName, ext)
+	
+	If Len(ext) = 0 Or pos = 0 Then
+		res = fileName
+	Else
+		res = Mid$(fileName, 1, pos - 2)
+	End If
+	
+	PathToNameNoExt = res
+End Function
+
+
+Function PathToExt(ByVal path As String) As String
+	Dim res As String
+	Dim pos As Integer
+	
+	pos = 1
+	
+	Do
+		pos = InStr(pos + 1, path, ".")
+	Loop While InStr(pos + 1, path, ".") > 0
+	
+	If pos > 0 Then
+		res = Mid$(path, pos + 1, Len(path) - pos)
+	End If
+	
+	PathToExt = res
+End Function

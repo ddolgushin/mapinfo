@@ -1,0 +1,226 @@
+Include "mapbasic.def"
+Include "Date.def"
+Include "Util.def"
+
+
+Define TIME_SEPARATOR		":"
+Define DATE_SEPARATOR		"."
+Define DATE_SEPARATOR_SLASH	"/"
+Define DATE_SEPARATOR_DASH	"-"
+Define START_YEAR			1900
+Define CUR_MILLENNIUM		2000
+
+
+Declare Function ParseDateTimeUsingSeparator(ByVal dateStr As String, ByVal sep As String,
+		dt As DateTime) As Logical
+Declare Function ParseDateUsingSeparator(ByVal dateStr As String, ByVal sep As String,
+		dt As DateTime) As Logical
+Declare Function ParseTime(ByVal timeStr As String, 
+		dt As DateTime) As Logical
+
+
+Sub GetCurrentDate(dt As DateTime)
+	Dim ts As Date
+	Dim timeStr As String
+	Dim chunks() As String
+	
+	ts = CurDate()
+	timeStr = Time(24)
+	
+	Call Split(timeStr, TIME_SEPARATOR, chunks)
+	
+	dt.y = Year(ts)
+	dt.m = Month(ts)
+	dt.d = Day(ts)
+	
+	If UBound(chunks) = 3 Then
+		dt.hr = chunks(1)
+		dt.min = chunks(2)
+		dt.sec = chunks(3)
+	End If
+End Sub
+
+
+Function ParseDate(ByVal dateStr As String, dt As DateTime) As Logical
+	Dim parsed As Logical
+	
+	parsed = TRUE
+	
+	If ParseDateTimeUsingSeparator(dateStr, DATE_SEPARATOR, dt) Then
+	ElseIf ParseDateTimeUsingSeparator(dateStr, DATE_SEPARATOR_SLASH, dt) Then
+	ElseIf ParseDateTimeUsingSeparator(dateStr, DATE_SEPARATOR_DASH, dt) Then
+	Else
+		parsed = FALSE
+		
+		Call ResetDateTime(dt)
+	End If
+	
+	ParseDate = parsed
+End Function
+
+
+'
+' Format as Rus date.
+'
+Function DateToString(dt As DateTime) As String
+	DateToString = Format$(dt.d, "00")
+		+ DATE_SEPARATOR + Format$(dt.m, "00")
+		+ DATE_SEPARATOR + dt.y
+End Function
+
+
+'
+' Format as US date.
+'
+Function DateToUSString(dt As DateTime) As String
+	DateToUSString = dt.y
+		+ DATE_SEPARATOR_DASH + Format$(dt.m, "00")
+		+ DATE_SEPARATOR_DASH + Format$(dt.d, "00")
+End Function
+
+
+Function DateTimeToString(dt As DateTime) As String
+	DateTimeToString = Format$(dt.d, "00")
+		+ DATE_SEPARATOR_DASH + Format$(dt.m, "00")
+		+ DATE_SEPARATOR_DASH + dt.y
+		+ " "
+		+ dt.hr + TIME_SEPARATOR + dt.min + TIME_SEPARATOR + dt.sec
+End Function
+
+
+Function DateTimeToUSString(dt As DateTime) As String
+	DateTimeToUSString = dt.y
+		+ DATE_SEPARATOR_DASH + Format$(dt.m, "00")
+		+ DATE_SEPARATOR_DASH + Format$(dt.d, "00")
+		+ " "
+		+ dt.hr + TIME_SEPARATOR + dt.min + TIME_SEPARATOR + dt.sec
+End Function
+
+
+'
+' Set all fields to zero.
+'
+Sub ResetDateTime(dt As DateTime)
+	dt.y = 0
+	dt.m = 0
+	dt.d = 0
+	dt.hr = 0
+	dt.min = 0
+	dt.sec = 0
+End Sub
+
+
+'
+' Try to parse using given separator.
+' Try to extract time information too.
+'
+Function ParseDateTimeUsingSeparator(ByVal dateStr As String, ByVal sep As String,
+		dt As DateTime) As Logical
+	Dim parsed As Logical
+	Dim chunks() As String
+	Dim dayStr, monthStr, yearStr As String
+	Dim timeStr As String
+	
+	Call Split(dateStr, " ", chunks)
+	
+	' If got time spec, separated from date with a whitespace...
+	If UBound(chunks) = 2 Then
+		dateStr = Trim(chunks(1))
+		timeStr = Trim(chunks(2))
+	End If
+	
+	' Parse date.
+	parsed = ParseDateUsingSeparator(dateStr, sep, dt)
+	
+	If Len(timeStr) > 0 And parsed Then
+		parsed = ParseTime(timeStr, dt)
+	End If
+	
+	ParseDateTimeUsingSeparator = parsed
+End Function
+
+
+Function ParseDateUsingSeparator(ByVal dateStr As String, ByVal sep As String,
+		dt As DateTime) As Logical
+	Dim parsed As Logical
+	Dim chunks() As String
+	Dim dayStr, monthStr, yearStr As String
+	
+	Call Split(dateStr, sep, chunks)
+	
+	If UBound(chunks) = 3 Then
+		dayStr = chunks(1)
+		monthStr = chunks(2)
+		yearStr = chunks(3)
+		
+		If Val(dayStr) > 0 And Val(monthStr) > 0 And Val(yearStr) > 0 Then
+			' Decide whether it is the "yyyy-mm-dd" or "dd-mm-yyyy" format.
+			If Len(dayStr) > 2 Or Val(dayStr) > 31 Then
+				dayStr = chunks(3)
+				yearStr = chunks(1)
+			End If
+			
+			parsed = (Not Val(monthStr) > 12)
+			
+			If parsed Then
+				parsed = (Not Val(dayStr) > 31)
+			End If
+		End If
+		
+		If parsed Then
+			dt.d = StrToInt(dayStr)
+			dt.m = StrToInt(monthStr)
+			dt.y = StrToInt(yearStr)
+			
+			If Len(yearStr) <= 2 Then
+				If dt.y + CUR_MILLENNIUM > Year(CurDate()) Then
+					dt.y = dt.y + START_YEAR
+				Else
+					dt.y = dt.y + CUR_MILLENNIUM
+				End If
+			End If
+		End If
+	End If
+	
+	ParseDateUsingSeparator = parsed
+End Function
+
+
+Function ParseTime(ByVal timeStr As String, 
+		dt As DateTime) As Logical
+	Dim parsed As Logical
+	Dim chunks() As String
+	Dim hStr, mStr, sStr As String
+	Dim size As Integer
+	
+	Call Split(timeStr, TIME_SEPARATOR, chunks)
+	
+	size = UBound(chunks)
+	
+	If size >= 2 And size < 4 Then
+		hStr = chunks(1)
+		mStr = chunks(2)
+		
+		If size > 2 Then
+			sStr = chunks(3)
+		Else
+			sStr = "0"
+		End If
+		
+		parsed = (Val(hStr) >= 0 And Val(mStr) >= 0 And Val(sStr) >= 0
+			And Val(hStr) < 24 And Val(mStr) < 60 And Val(sStr) < 60)
+		
+		If parsed Then
+			dt.hr = StrToInt(hStr)
+			dt.min = StrToInt(mStr)
+			dt.sec = StrToInt(sStr)
+		End If
+	End If
+	
+	ParseTime = parsed
+End Function
+
+
+Function DateIsEmpty(dt As DateTime) As Logical
+	DateIsEmpty = (dt.y = 0 And dt.m = 0 And dt.d = 0)
+End Function

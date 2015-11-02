@@ -1,0 +1,309 @@
+Include "mapbasic.def"
+Include "Line.def"
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+Sub CreateLine2D(l As Line2D, p1 As Point2D, p2 As Point2D)
+	Call CopyPoint2D(p1, l.p1)
+	Call CopyPoint2D(p2, l.p2)
+End Sub
+
+
+Sub CreateLine2DExt(l As Line2D, ByVal x1 As Float, ByVal y1 As Float, ByVal x2 As Float, ByVal y2 As Float)
+	Dim p1, p2 As Point2D
+	
+	Call CreatePoint2D(p1, x1, y1)
+	Call CreatePoint2D(p2, x2, y2)
+	Call CreateLine2D(l, p1, p2)
+End Sub
+
+
+Sub CopyLine(l1 As Line2D, l2 As Line2D)
+	Call CopyPoint2D(l1.p1, l2.p1)
+	Call CopyPoint2D(l1.p2, l2.p2)
+End Sub
+
+
+Sub AddLine2DToArray(lineArr() As Line2D, l As Line2D)
+	Dim size As Integer
+	
+	size = UBound(lineArr) + 1
+	
+	ReDim lineArr(size)
+	
+	Call CopyLine(l, lineArr(size))
+End Sub
+
+
+Function GetLine2DLength(l As Line2D) As Float
+	GetLine2DLength = GetDistanceBetweenPoints2D(l.p1, l.p2)
+End Function
+
+
+'
+' Get angle between two lines basing on two-point line
+' specification.
+'
+' Note that in this case the angle is always between [0; 180),
+' despite of lines' normal vectors orientation.
+'
+Function GetAngleBetweenLines2DSimple(l1 As Line2D, l2 As Line2D) As Float
+	Dim v1, v2 As Vector2D
+	Dim angle As Float
+	Dim vectorProduct, lenProduct, cosValue As Float
+	
+	Call GetLine2DVector(l1, v1)
+	Call GetLine2DVector(l2, v2)
+	
+	vectorProduct = MultiplyVectors2D(v1, v2)
+	lenProduct = GetVector2DLength(v1) * GetVector2DLength(v2)
+	angle = 0
+	
+	If lenProduct <> 0 Then
+		cosValue = vectorProduct / lenProduct
+		
+		If cosValue <> 1 Then ' Fix: Acos(1) gets error, though it is 0.
+			If cosValue = -1 Then ' Fix: Acos(-1) also gets error, should return 3.14.
+				angle = 180
+			Else
+				angle = RAD_2_DEG * ACos(cosValue)
+			End If
+		End If
+	End If
+	
+	GetAngleBetweenLines2DSimple = angle
+End Function
+
+
+'
+' Obtain angle between normal vectors of two lines in degrees
+' in counter-clockwise order, i.e. it lies in [0; 360) segment.
+'
+' Countdown is taken from the first line (think of them as clock arrows:
+' the first line is a clock arrow, and the second one is a minute one;
+' the angle between them in this function is calculated in CCW order,
+' i.e. if it is 6:45 o'clock, the angle is 270 degrees).
+'
+Function GetAngleBetweenLines2D(l1 As Line2D, l2 As Line2D) As Float
+	Dim v1, v2 As Vector2D
+	Dim angle, simpleAngle As Float
+	Dim vq1, vq2 As SmallInt
+	Dim vectorProduct, lenProduct, cosValue As Float
+	Dim compareResult As SmallInt
+	
+	Call GetLine2DVector(l1, v1)
+	Call GetLine2DVector(l2, v2)
+	
+	vq1 = GetVector2DQuadrant(v1)
+	vq2 = GetVector2DQuadrant(v2)
+	compareResult = Compare2DLines(l1, l2)
+	simpleAngle = GetAngleBetweenLines2DSimple(l1, l2)
+	angle = simpleAngle
+	
+	If vq1 = vq2 Then
+		If compareResult = 1 And v1.p.x <> 0 Then
+			angle = 360 - angle
+		End If
+	Else
+		If vq1 = QUADRANT_I Then
+			If vq2 = QUADRANT_III Then
+				If compareResult = -1 Then
+					angle = 360 - angle
+				End If
+			ElseIf vq2 = QUADRANT_IV Then
+				angle = 360 - angle
+			End If
+		ElseIf vq1 = QUADRANT_II Then
+			If vq2 = QUADRANT_I Then
+				angle = 360 - angle
+			ElseIf vq2 = QUADRANT_IV Then
+				If compareResult = -1 Or v1.p.x = 0 Then
+					angle = 360 - angle
+				End If
+			End If
+		ElseIf vq1 = QUADRANT_III Then
+			If vq2 = QUADRANT_I Then
+				If compareResult = -1 Then
+					angle = 360 - angle
+				End If
+			ElseIf vq2 = QUADRANT_II Then
+				angle = 360 - angle
+			End If
+		ElseIf vq1 = QUADRANT_IV Then
+			If vq2 = QUADRANT_II Then
+				If compareResult = -1 Then
+					angle = 360 - angle
+				End If
+			ElseIf vq2 = QUADRANT_III Then
+				angle = 360 - angle
+			End If
+		End If
+	End If
+	
+	If Round(angle, 0.1) <> 360 Then
+		GetAngleBetweenLines2D = angle
+	End If
+End Function
+
+
+'
+' Measure angle between north oriented line and given one (clockwise order).
+'
+Function GetPositionAngle(l As Line2D) As Float
+	Dim lN As Line2D
+	
+	Call CreateLine2DExt(lN, 0, 0, 0, 1)
+	
+	GetPositionAngle = 360 - GetAngleBetweenLines2D(lN, l)
+End Function
+
+
+'
+' Get line vector. Simply bring it to the [0; 0] point
+' by subtracting the first X and Y coordinate from the second ones.
+'
+Sub GetLine2DVector(l As Line2D, v As Vector2D)
+	v.p.x = l.p2.x - l.p1.x
+	v.p.y = l.p2.y - l.p1.y
+End Sub
+
+
+Function Line2DToString(l As Line2D) As String
+	Line2DToString = "[" + Point2DToString(l.p1) + "; "
+		+ Point2DToString(l.p2) + "]"
+End Function
+
+
+'
+' Test both lines with x value. If line 1 value is greater, return 1;
+' 0 - if they are equal; -1 - if firts is smaller than second one.
+'
+' NOTE: offset is avoided by moving both lines to [0, 0] point.
+'
+Function Compare2DLines(l1 As Line2D, l2 As Line2D) As SmallInt
+	Dim l1Tmp, l2Tmp As Line2D
+	Dim v1, v2 As Vector2D
+	Dim y1, y2, testX As Float
+	Dim res As SmallInt
+	
+	Call GetLine2DVector(l1, v1)
+	Call GetLine2DVector(l2, v2)
+	Call CreateLine2DExt(l1Tmp, 0, 0, v1.p.x, v1.p.y)
+	Call CreateLine2DExt(l2Tmp, 0, 0, v2.p.x, v2.p.y)
+	
+	testX = 10
+	y1 = GetFunctionValue(l1Tmp, testX)
+	y2 = GetFunctionValue(l2Tmp, testX)
+	
+	If y1 > y2 Then
+		res = 1
+	ElseIf y1 < y2 Then
+		res = -1
+	Else
+		res = 0
+	End If
+	
+	Compare2DLines = res
+End Function
+
+
+'
+' Calculate function value basing on canonical line equation.
+'
+' Here we need a starting point M0 (e.g. [0, 0]), and line's vector l:
+'		M0(x0, y0), l(m, n) => (x - x0) / m = (y - y0) / n
+'		... y = n * (x - x0) / m + y0
+'
+Function GetFunctionValue(l As Line2D, ByVal x As Float) As Float
+	Dim y As Float
+	Dim v As Vector2D
+	Dim p0 As Point2D
+	
+	Call GetLine2DVector(l, v)
+	
+	If v.p.x = 0 Then
+		If v.p.y = 0 Then
+			y = 0
+		Else
+			If GetVector2DVerticalDirection(v) = DIRECTION_NORTH Then
+				y = MAX_INT
+			Else
+				y = -MAX_INT
+			End If
+		End If
+	Else
+		Call CreatePoint2D(p0, l.p1.x, l.p1.y)
+		
+		y = v.p.y * (x - p0.x) / v.p.x + p0.y
+	End If
+	
+	GetFunctionValue = y
+End Function
+
+
+'
+' Swap line x and y coordinates, so that x-axis becomes y and vice versa.
+'
+Sub InvertLine(l As Line2D)
+	Dim tmpX1, tmpX2 As Float
+	
+	tmpX1 = l.p1.x
+	tmpX2 = l.p2.x
+	
+	l.p1.x = l.p1.y
+	l.p1.y = tmpX1
+	
+	l.p2.x = l.p2.y
+	l.p2.y = tmpX2
+End Sub
+
+
+'
+' Get coordinates for point lying on a line on a given distance
+' from startPoint.
+'
+'         /|
+' a     /  |
+'     /    | b
+'   /alpha |
+' /_)______|
+'     c
+'
+Sub GetPointOnLine(startPoint As Point2D, endPoint As Point2D,
+		ByVal distance As Float, resPoint As Point2D)
+	If startPoint.x <> endPoint.x Or startPoint.y <> endPoint.y Then
+		Dim l, tmpL As Line2D
+		Dim tmpPoint As Point2D ' temp point on the same y-coordinate as start point
+		Dim a, b, c, alpha As Float
+		Dim sgnX, sgnY As SmallInt
+		
+		Call CreatePoint2D(tmpPoint, startPoint.x + 1, startPoint.y)
+		Call CreateLine2D(l, startPoint, endPoint)
+		Call CreateLine2D(tmpL, startPoint, tmpPoint)
+		
+		alpha = DEG_2_RAD * Abs(360 - GetAngleBetweenLines2D(l, tmpL))
+		b = distance * Sin(alpha)
+		c = distance * Cos(alpha)
+		
+		If startPoint.x <= endPoint.x Then
+			sgnX = 1
+		Else
+			sgnX = -1
+		End If
+		
+		If startPoint.y <= endPoint.y Then
+			sgnY = 1
+		Else
+			sgnY = -1
+		End If
+		
+		resPoint.x = startPoint.x + sgnX * c
+		resPoint.y = startPoint.y + sgnY * b
+	End If
+End Sub

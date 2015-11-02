@@ -1,0 +1,31 @@
+Type KVPair
+	key As String
+	value As String
+End Type
+
+Type HashTable
+	arr() As KVPair
+End Type
+
+
+Declare Sub HashTableAdd(table As HashTable, ByVal key As String, ByVal value As String)
+Declare Sub HashTableAddBlind(table As HashTable, ByVal key As String, ByVal value As String)
+Declare Sub HashTableClear(table As HashTable)
+Declare Sub HashTableGetKeys(table As HashTable, keys() As String)
+Declare Sub HashTableGetValues(table As HashTable, values() As String)
+Declare Sub HashTableCopy(src As HashTable, dst As HashTable)
+Declare Sub HashTableSort(table As HashTable, ByVal byValue As Logical, ByVal asc As Logical)
+Declare Sub HashTableSortAsNumber(table As HashTable, ByVal byValue As Logical, ByVal asc As Logical)
+Declare Sub HashTableGetPair(table As HashTable, ByVal idx As Integer, key As String, value As String)
+
+Declare Function HashTableCreate(table As HashTable, keys() As String, values() As String) As Logical
+Declare Function HashTableGetSize(table As HashTable) As Integer
+Declare Function HashTableGet(table As HashTable, ByVal key As String) As String
+Declare Function HashTableGetI(table As HashTable, ByVal key As String) As String
+Declare Function HashTableDelete(table As HashTable, ByVal key As String) As String
+Declare Function HashTableKeyExists(table As HashTable, ByVal key As String) As Logical
+Declare Function HashTableGetKeyIndex(table As HashTable, ByVal key As String) As Integer
+Declare Function HashTableToString(table As HashTable) As String
+Declare Function HashTableJoin(table As HashTable, ByVal colGlue As String, ByVal rowGlue As String) As String
+Declare Function HashTableFromString(table As HashTable, ByVal s As String,
+	ByVal colGlue As String, ByVal rowGlue As String) As Integer

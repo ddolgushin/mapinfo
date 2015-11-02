@@ -1,0 +1,16 @@
+Declare Function TestMultiplyMatrices() As String
+Declare Function TestCompareMatrices() As String
+
+Declare Function TestGetPointOnLine() As String
+Declare Function TestGetAngleBetweenLines2D() As String
+Declare Function TestGetFunctionValue() As String
+Declare Function TestCompare2DLines() As String
+
+Declare Function TestGetVector2DQuadrant() As String
+Declare Function TestGetVector2DVerticalDirection() As String
+Declare Function TestGetVector2DHorizontalDirection() As String
+Declare Function TestGetVector2DQuadrantDistance() As String
+Declare Function TestChangeVector2DDirection() As String
+
+Declare Function TestGetMinMaxInArr() As String
+Declare Function TestDegreeToDegMin() As String

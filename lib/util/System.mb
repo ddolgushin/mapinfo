@@ -1,0 +1,257 @@
+Include "mapbasic.def"
+Include "System.def"
+Include "Array.def"
+Include "Util.def"
+Include "File.def"
+Include "Registry.def"
+Include "Logger.def"
+Include "../math/Util.def"
+
+
+Define SYNC_RUN_POLL_INTERVAL	500
+
+
+Declare Sub _Sleep Lib "kernel32.dll" Alias "Sleep" (ByVal interval As Integer)
+
+Declare Function _GetLastError Lib "kernel32.dll" Alias "GetLastError" As Integer
+Declare Function _ShellExecute Lib "shell32.dll" Alias "ShellExecuteA"
+	(ByVal hwnd As Integer, ByVal lpOperation As String, ByVal lpFile As String,
+  ByVal lpParameters As String, ByVal lpDirectory As String, ByVal nShowCmd As Logical) As Integer
+Declare Function _GetEnvironmentVariable Lib "kernel32.dll" Alias "GetEnvironmentVariableA"
+	(ByVal lpName As String, lpBuffer As String * MAX_STR_LEN, ByVal nSize As Integer) As Integer
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+''
+'' INTERFACE IMPLEMENTATION
+''
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'
+' Sleep for a given interval in milliseconds.
+'
+Sub Sleep(ByVal interval As Integer)
+	Call _Sleep(interval)
+End Sub
+
+
+Function GetEnvironmentVariable(ByVal varName As String) As String
+	Dim res As String * MAX_STR_LEN
+
+	If _GetEnvironmentVariable(varName, res, MAX_STR_LEN) > 0 Then End If
+
+	GetEnvironmentVariable = res
+End Function
+
+
+'
+' Run external program using cmd.exe and wait until it finishes.
+'
+Sub RunProgramSync(ByVal cmd As String)
+	Call RunProgramSyncExt(cmd, TRUE, SYNC_RUN_POLL_INTERVAL)
+End Sub
+
+
+'
+' Run external program using cmd.exe and wait until it finishes.
+'
+Sub RunProgramSyncExt(ByVal cmd As String, ByVal hide As Logical, ByVal pollInterval As Integer)
+	Dim errCode, swFlag As Integer
+	Dim execFlagFile As String
+
+	execFlagFile = TempFileName$(GetTempDirectory())
+
+	If hide Then swFlag = 0
+	Else swFlag = 1 End If
+
+	cmd = "/c """ + cmd + """ & echo done > " + execFlagFile
+
+	If _ShellExecute(0, "open", "cmd", cmd, "", swFlag) Then End If
+
+	Do While Not FileExistsExt(execFlagFile)
+		Call Sleep(SYNC_RUN_POLL_INTERVAL)
+	Loop
+
+	Kill execFlagFile
+End Sub
+
+
+'
+' Execute list of commands.
+'
+Sub RunProgramsBatch(cmdList() As String, ByVal limit As Integer)
+	Dim i, size, batchCounter As Integer
+	Dim cmdBatch As String
+	
+	size = UBound(cmdList)
+	
+	If size > 0 Then
+		cmdBatch = ""
+		batchCounter = 0
+		
+		If limit < 1 Then
+			limit = CMD_BATCH_LIMIT
+		End If
+		
+		If size < limit Then
+			limit = size
+		End If
+		
+		For i = 1 To size
+			batchCounter = batchCounter + 1
+			cmdBatch = cmdBatch + cmdList(i)
+			
+			If batchCounter < limit Then
+				cmdBatch = cmdBatch + " & "
+			Else
+				Call RunProgramSync(cmdBatch)
+				
+				cmdBatch = ""
+				batchCounter = 0
+				
+				If size - i < limit Then
+					limit = size - i
+				End If
+			End If
+		Next
+	End If
+End Sub
+
+
+'
+' Find out which applications are currently running in MapInfo.
+'
+Sub GetAppList(list() As String, ByVal keepFullPath As Logical)
+	Dim chan As Integer
+	Dim appStr As String
+	Dim i, size As Integer
+	Dim tmpList() As String
+	Dim appFile As String
+	
+	ReDim list(0)
+	
+	chan = DDEInitiate("MapInfo", "System")
+	appStr = DDERequest$(chan, "Topics")
+	
+	DDETerminate chan
+	
+	Call Split(appStr, "	", list)
+	
+	' Cut all entries to file names.
+	If Not keepFullPath Then
+		size = UBound(list)
+		
+		For i = 1 To size
+			appFile = PathToFileName$(list(i))
+			
+			Call AddStringToArray(tmpList, appFile)
+		Next
+		
+		Call CopyStringArray(tmpList, list)
+	End If
+End Sub
+
+
+Function GetTempDirectory() As String
+	Dim res As String
+	
+	If SystemInfo(SYS_INFO_PLATFORM) = PLATFORM_WIN Then
+		res = GetEnvironmentVariable("TEMP") + "\"
+	End If
+	
+	GetTempDirectory = res
+End Function
+
+
+'
+' Bruteforce winword home search.
+'
+' Note that in case of multiple Offices installed the oldest one will be called.
+'
+Function GetWinWordPath() As String
+	Dim res As String
+	
+	If FileExists("C:\Program Files\Microsoft Office\Office10\WINWORD.EXE") Then
+		res = "C:\Program Files\Microsoft Office\Office10\WINWORD.EXE"
+	ElseIf FileExists("C:\Program Files\Microsoft Office\Office11\WINWORD.EXE") Then
+		res = "C:\Program Files\Microsoft Office\Office11\WINWORD.EXE"
+	ElseIf FileExists("C:\Program Files\Microsoft Office\Office12\WINWORD.EXE") Then
+		res = "C:\Program Files\Microsoft Office\Office12\WINWORD.EXE"
+	ElseIf FileExists("C:\Program Files\Microsoft Office\Office13\WINWORD.EXE") Then
+		res = "C:\Program Files\Microsoft Office\Office13\WINWORD.EXE"
+	ElseIf FileExists("C:\Program Files\Microsoft Office\Office14\WINWORD.EXE") Then
+		res = "C:\Program Files\Microsoft Office\Office14\WINWORD.EXE"
+	End If
+	
+	GetWinWordPath = res
+End Function
+
+
+Function GetLastError() As Integer
+	GetLastError = _GetLastError()
+End Function
+
+
+Function CheckDotNet(ByVal minVersion As Float) As Logical
+	Dim res As Logical
+
+	res = RegistryKeyExists(HKEY_LOCAL_MACHINE,
+		"SOFTWARE\Microsoft\NET Framework Setup\NDP\v" + minVersion)
+	
+'	Dim i, size, posA, posB As Integer
+'	Dim tmpFile, cmd, regKey, strA, strB As String
+'	Dim data() As String
+'	Dim ver As Float
+'	Dim versions() As Float
+'	
+'	regKey = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\NET Framework Setup\NDP"
+'	strA = "[" + regKey + "\v"
+'	posA = Len(strA) + 1
+'	strB = "]"
+'	tmpFile = TempFileName$(GetTempDirectory())
+'	cmd = "regedit.exe /e " + tmpFile + " """ + regKey + """"
+'	
+'	Call RunProgramSync(cmd)
+'	
+'	If FileExistsExt(tmpFile) Then
+'		If minVersion > 0 Then
+'			If FileReadLinesExt(tmpFile, data, CHARSET_UNICODE) = 0 Then
+'				res = FALSE
+'			Else
+'				size = UBound(data)
+'				
+'				For i = 1 To size
+'					If StartsWith(data(i), strA) And EndsWith(data(i), strB) Then
+'						posB = InStr(posA, data(i), "\")
+'						
+'						If posB <= posA Then
+'							posB = Len(data(i)) - posA
+'						Else
+'							posB = posB - posA
+'						End If
+'						
+'						ver = StrToFloat(Mid$(data(i), posA, posB))
+'						
+'						If ArraySearchFloat(versions, ver) < 1 Then
+'							Call AddFloatToArray(versions, ver)
+'						End If
+'					End If
+'				Next
+'				
+'				res = (GetMax(versions) >= minVersion)
+'			End If
+'		Else ' No version specified.
+'			res = TRUE
+'		End If
+'		
+'		Kill tmpFile
+'	End If
+	
+	CheckDotNet = res
+End Function
+
+
+Function CheckExcel() As Logical
+	CheckExcel = RegistryKeyExists(HKEY_CLASSES_ROOT, "Excel.Application")
+End Function

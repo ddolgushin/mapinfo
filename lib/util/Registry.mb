@@ -1,0 +1,191 @@
+'
+' Started from here: https://groups.google.com/forum/?fromgroups#!topic/mapinfo-l/3-tZ25Begmk
+'
+' Registry Key Security and Access Rights: http://msdn.microsoft.com/en-us/library/windows/desktop/ms724878%28v=vs.85%29.aspx
+' System Error Codes: http://msdn.microsoft.com/en-us/library/windows/desktop/ms681381%28v=vs.85%29.aspx
+' Registry Functions: http://msdn.microsoft.com/en-us/library/windows/desktop/ms724875%28v=vs.85%29.aspx
+'
+
+Include "Registry.def"
+Include "Array.def"
+Include "Util.def"
+
+
+Define REG_SZ											1
+Define REG_DWORD									4
+Define PS_SIZE										256
+
+Define ERROR_SUCCESS							0
+
+Define ERROR_FILE_NOT_FOUND				2 ' Registry path does not exist
+Define ERROR_ACCESS_DENIED				5 ' Requested permissions not available 
+Define ERROR_INVALID_HANDLE				6 ' Invalid handle or top-level key 
+Define ERROR_BAD_NETPATH					53 ' Network path not found 
+Define ERROR_INVALID_PARAMETER		87 ' Bad parameter to a Win32 API function 
+Define ERROR_CALL_NOT_IMPLEMENTED	120 ' Function valid only in WinNT/2000?XP 
+Define ERROR_INSUFFICIENT_BUFFER	122 ' Buffer too small to hold data 
+Define ERROR_BAD_PATHNAME					161 ' Registry path does not exist 
+Define ERROR_NO_MORE_ITEMS				259 ' Invalid enumerated value 
+Define ERROR_BADDB								1009 ' Corrupted registry 
+Define ERROR_BADKEY								1010 ' Invalid registry key 
+Define ERROR_CANTOPEN							1011 ' Cannot open registry key 
+Define ERROR_CANTREAD							1012 ' Cannot read from registry key 
+Define ERROR_CANTWRITE						1013 ' Cannot write to registry key 
+Define ERROR_REGISTRY_RECOVERED		1014 ' Recovery of part of registry successful 
+
+Define ERROR_REGISTRY_CORRUPT			1015 ' Corrupted registry
+
+Define ERROR_REGISTRY_IO_FAILED		1016 ' Input/output operation failed 
+Define ERROR_NOT_REGISTRY_FILE		1017 ' Input file not in registry file format 
+
+Define ERROR_KEY_DELETED					1018 ' Key already deleted
+
+Define ERROR_KEY_HAS_CHILDREN			1020 ' Key has subkeys & cannot be deleted 
+
+Define KEY_READ										&H20019
+Define KEY_SET_VALUE							&H2
+Define KEY_QUERY_VALUE						&H1
+Define KEY_CREATE_SUB_KEY					&H4
+
+Define REG_OPTION_BACKUP_RESTORE	&H4
+Define REG_OPTION_CREATE_LINK			&H2
+Define REG_OPTION_NON_VOLATILE		&H0
+Define REG_OPTION_VOLATILE				&H1
+
+
+Type FILETIME_t
+	dwLowDateTime As Integer
+	dwHighDateTime As Integer
+End Type
+
+
+Declare Function RegOpenKey Lib "advapi32.dll" Alias "RegOpenKeyExA" (ByVal hKey As Integer, ByVal SubKey As String, ByVal Reserved As Integer, ByVal Options As Integer, pResult As Integer) As Integer
+Declare Function RegCloseKey Lib "advapi32.dll" Alias "RegCloseKey" (ByVal hKey As Integer) As Integer
+Declare Function RegEnumKey Lib "advapi32.dll" Alias "RegEnumKeyExA" (ByVal hKey As Integer, ByVal dwIndex As Integer, lpName As String, lpcbName As Integer, ByVal lpReserved As Integer, ByVal lpClass As String, lpcbClass As Integer, lpftLastWriteTime As FILETIME_t) As Integer
+Declare Function RegCreateKey Lib "advapi32.dll" Alias "RegCreateKeyExA" (ByVal hKey As Integer, ByVal SubKey As String, ByVal Reserved As Integer, ByVal Clazz As String, ByVal Options As Integer, ByVal SamDesired As Integer, ByVal SecurityAttr As Integer, pKey As Integer, pDisposition As Integer) As Integer
+
+Declare Function RegSetValue Lib "advapi32.dll" Alias "RegSetValueExA" (ByVal hKey As Integer, ByVal ValueName As String, ByVal Res1 As Integer, ByVal EntryType As Integer, ByVal EntryVal As String, ByVal lpcbData As Integer) As Integer
+
+Declare Function RegQueryInfoKey Lib "advapi32.dll" Alias "RegQueryInfoKeyA" (ByVal hKey As Integer, ByVal lpClass As String, lpcbClass As Integer, ByVal lpRes As Integer, lpcSubKeys As Integer, lpcMaxSubKeyLen As Integer, lpcMaxClassLen As Integer, lpcValues As Integer, lpcMaxValueNameLen As Integer, lpcMaxValueLen As Integer, lpcbSecurityDescriptor As Integer, lpftLastWriteTime As FILETIME_t) As Integer
+Declare Function RegQueryValue Lib "advapi32.dll" Alias "RegQueryValueExA" (ByVal hKey As Integer, ByVal ValueName As String, ByVal Res1 As Integer, EntryType As Integer, EntryVal As String * PS_SIZE, lpcbData As Integer) As Integer
+Declare Function RegQueryNumber Lib "advapi32.dll" Alias "RegQueryValueExA" (ByVal hKey As Integer, ByVal ValueName As String, ByVal Res1 As Integer, EntryType As Integer, NumVal As Integer, lpcbData As Integer) As Integer
+Declare Function RegQueryValueType Lib "advapi32.dll" Alias "RegQueryValueExA" (ByVal hKey As Integer, ByVal ValueName As String, ByVal Res1 As Integer, EntryType As Integer, ByVal EntryVal As Integer, lpcbData As Integer) As Integer
+
+
+Declare Function GetRegistryString(ByVal hKey As Integer, ByVal sEntry As String) As String
+
+
+Sub RegistryEnumKeys(ByVal key As String, ByVal subKey As String,
+		subKeys() As String)
+'	Dim ret, i, hKey, maxSubKeyLen, tmpParam As Integer
+'	Dim buf As String
+'	Dim fTime As FILETIME_t
+'	
+'	ReDim subKeys(0)
+'	
+'	ret = RegOpenKey(key, subKey, 0, KEY_READ, hKey)
+'	
+'	If ret = ERROR_SUCCESS Then
+'		ret = RegQueryInfoKey(hKey, "", tmpParam, 0, tmpParam, maxSubKeyLen, tmpParam,
+'			tmpParam, tmpParam, tmpParam, tmpParam, fTime)
+'		maxSubKeyLen = maxSubKeyLen * 2
+'		
+'		Do While (RegEnumKey(hKey, i, buf, maxSubKeyLen, 0, "", tmpParam, fTime) = ERROR_SUCCESS)
+'			' DBG
+'			Print buf
+'			
+'			If Len(Trim(buf)) > 0 Then
+'				Call AddStringToArray(subKeys, buf)
+'			End If
+'			
+'			i = i + 1
+'		Loop
+'		
+'		ret = RegCloseKey(hKey)
+'	End If
+	
+	Note "Not implemented"
+End Sub
+
+
+Function RegistryKeyExists(ByVal key As String, ByVal subKey As String) As Logical
+	Dim res, ret As Logical
+	Dim hKey As Integer
+	
+	ret = RegOpenKey(key, subKey, 0, KEY_READ, hKey)
+	res = (ret = ERROR_SUCCESS)
+	
+	If res Then ret = RegCloseKey(hKey) End If
+	
+	RegistryKeyExists = res
+End Function
+
+
+Function RegistryReadValue(ByVal key As String, ByVal subKey As String, ByVal value As String) As String
+	Dim res As String
+	Dim ret, hKey As Integer
+	
+	ret = RegOpenKey(key, subKey, 0, KEY_READ, hKey)
+	res = GetRegistryString(hKey, value)
+	ret = RegCloseKey(hKey)
+	
+	RegistryReadValue = res
+End Function
+
+
+Function RegistryCreateKey(ByVal key As String, ByVal subKey As String) As Logical
+	Dim ret, hKey, phKey, disposition As Integer
+	
+	ret = RegOpenKey(key, "", 0, KEY_CREATE_SUB_KEY, hKey)
+	ret = RegCreateKey(hKey, subKey, 0, "", REG_OPTION_NON_VOLATILE,
+		KEY_CREATE_SUB_KEY, 0, phKey, disposition)
+	ret = RegCloseKey(hKey)
+	
+	RegistryCreateKey = (ret = ERROR_SUCCESS)
+End Function
+
+
+Function RegistryWriteValueS(ByVal key As String, ByVal subKey As String,
+		ByVal value As String, ByVal data As String) As Logical
+	Dim ret, hKey, size As Integer
+	
+	size = Len(data) + 1
+	ret = RegOpenKey(key, subKey, 0, KEY_SET_VALUE, hKey)
+	ret = RegSetValue(hKey, value, 0, REG_SZ, data, size)
+	
+	RegistryWriteValueS = (ret = ERROR_SUCCESS)
+End Function
+
+
+Function RegistryWriteValueI(ByVal key As String, ByVal subKey As String,
+		ByVal value As String, ByVal data As Integer) As Logical
+	Dim ret, hKey, size As Integer
+	Dim sData As String
+	
+	sData = Str$(data)
+	size = 4
+	ret = RegOpenKey(key, subKey, 0, KEY_SET_VALUE, hKey)
+	ret = RegSetValue(hKey, value, 0, REG_DWORD, sData, size)
+	
+	RegistryWriteValueI = (ret = ERROR_SUCCESS)
+End Function
+
+
+Function GetRegistryString(ByVal hKey As Integer, ByVal sEntry As String) As String
+	Dim res As String * PS_SIZE
+	Dim entryType, entryLen, numVal As Integer
+	
+	If RegQueryValueType(hKey, sEntry, 0, entryType, 0, entryLen) = ERROR_SUCCESS Then
+		If entryType = REG_SZ Then
+			If RegQueryValue(hKey, sEntry, 0, entryType, res, entryLen) = ERROR_SUCCESS Then
+				'res = entryVal
+			End If
+		ElseIf entryType = REG_DWORD Then
+			If RegQueryNumber(hKey, sEntry, 0, entryType, numVal, entryLen) = ERROR_SUCCESS Then
+				res = Str$(NumVal)
+			End If
+		End If
+	End If
+	
+	GetRegistryString = res
+End Function

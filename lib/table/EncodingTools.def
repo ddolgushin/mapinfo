@@ -1,0 +1,3 @@
+Declare Function EncodeForDB(ByVal str As String) As String
+Declare Function EncodeForDbNoCut(ByVal str As String) As String
+Declare Function DecodeFromDB(ByVal str As String) As String
